@@ -50,6 +50,7 @@ _ENV_TO_PROVIDER: dict[str, str] = {
     "XAI_API_KEY": "xai",
     "MOONSHOT_API_KEY": "moonshot",
     "ZAI_API_KEY": "zai",
+    "ANT_API_KEY": "ant",
 }
 
 # When multiple keys are set, prefer providers in this order. The
@@ -67,6 +68,7 @@ _PROVIDER_PRIORITY: list[str] = [
     "dashscope",
     "xai",
     "moonshot",
+    "ant",
     "zai",
     "openai",
 ]
@@ -84,6 +86,7 @@ _API_KEY_CONFIG_FIELDS: dict[str, str] = {
     "xai": "xai",
     "moonshot": "moonshot",
     "zai": "zai",
+    "ant": "ant",
 }
 
 
@@ -263,6 +266,14 @@ _PROVIDER_DEFAULTS: dict[str, ProviderDefaults] = {
         should_run="zai/glm-5.2",
         pre_retrieval="zai/glm-5.2",
         embedding=None,
+    ),
+    "ant": ProviderDefaults(
+        generation="ant/GLM5.1",
+        evaluation="ant/Kimi-K2.6",
+        should_run="ant/Kimi-K2.6",
+        pre_retrieval="ant/Kimi-K2.6",
+        embedding=None,
+        extraction_agent="ant/GLM5.1",
     ),
 }
 

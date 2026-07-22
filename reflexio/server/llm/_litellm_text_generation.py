@@ -423,6 +423,13 @@ class TextGenerationMixin:
             for m in fallback_models_raw
             if m != actual_model and not m.startswith("local/")
         ]
+        # Rewrite ant/* model names to openai/* — LiteLLM doesn't know the
+        # ant/ provider prefix, so we treat them as OpenAI-compatible with
+        # a custom api_base.
+        fallback_models = [
+            "openai/" + m.split("/", 1)[1] if m.lower().startswith("ant/") else m
+            for m in fallback_models
+        ]
 
         temperature = kwargs.pop("temperature", self.config.temperature)
         if self._is_temperature_restricted_model(actual_model):
@@ -495,6 +502,11 @@ class TextGenerationMixin:
             params["api_base"] = api_base
         elif actual_model.lower().startswith("zai/"):
             params["api_base"] = _ZAI_CODING_API_BASE
+        if actual_model.lower().startswith("ant/"):
+            # LiteLLM doesn't know ant/ as a provider prefix, so we rewrite
+            # it to openai/ so LiteLLM routes through the OpenAI-compatible
+            # provider path, while api_base points at the antchat endpoint.
+            params["model"] = "openai/" + actual_model.split("/", 1)[1]
         if api_version:
             params["api_version"] = api_version
 

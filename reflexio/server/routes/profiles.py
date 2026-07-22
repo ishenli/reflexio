@@ -340,6 +340,7 @@ def rerun_profile_generation_endpoint(
 def manual_profile_generation_endpoint(
     request: Request,
     payload: ManualProfileGenerationRequest,
+    background_tasks: BackgroundTasks,
     org_id: str = Depends(default_get_org_id),
 ) -> ManualProfileGenerationResponse:
     """Manually trigger profile generation with window-sized interactions and CURRENT output.
@@ -349,19 +350,29 @@ def manual_profile_generation_endpoint(
     window_size_override when present, falling back to the global window_size.
     Output is CURRENT profiles only.
 
+    The actual generation runs in the background to avoid request timeout
+    (profile extraction can take 60+ seconds due to multiple LLM calls).
+    Client polls ``GET /api/get_operation_status`` for progress.
+
     Args:
         request (Request): The HTTP request object (for rate limiting)
         payload (ManualProfileGenerationRequest): Request containing user_id, source, and extractor_names
+        background_tasks (BackgroundTasks): Background task runner
         org_id (str): Organization ID
 
     Returns:
-        ManualProfileGenerationResponse: Response containing success status and profiles generated count
+        ManualProfileGenerationResponse: Response indicating the job was started
     """
-    # Create Reflexio instance
     reflexio = reflexio_cache.get_reflexio(org_id=org_id)
 
-    # Call manual_profile_generation
-    return reflexio.manual_profile_generation(payload)
+    # Run in background to avoid proxy timeout — the generation involves
+    # multiple LLM calls (extraction + deduplication) that can exceed the
+    # 60s middleware timeout.
+    background_tasks.add_task(reflexio.manual_profile_generation, payload)
+
+    return ManualProfileGenerationResponse(
+        success=True, msg="Profile generation started", profiles_generated=None
+    )
 
 
 @router.post(

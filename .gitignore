@@ -221,3 +221,5 @@ plan.md
 
 # Superpowers / SDD working artifacts (internal dev notes — never publish to OSS)
 .superpowers/
+.codegraph
+.cursor

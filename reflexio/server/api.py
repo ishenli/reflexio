@@ -420,7 +420,9 @@ def create_app(
             _log_multi_worker_daemons()
             log_publish_hardware_capacity()
             validate_llm_availability()
-            from reflexio.server.llm.rerank import prewarm as _prewarm_cross_encoder
+            from reflexio.server.llm.rerank import (
+                maybe_start_prewarm as _prewarm_cross_encoder,
+            )
 
             _prewarm_cross_encoder()
             # The scheduler discovers every org with resumable work each tick and

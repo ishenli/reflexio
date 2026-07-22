@@ -292,6 +292,8 @@ class TestProfileConsolidatorInit:
             "XAI_API_KEY",
             "MOONSHOT_API_KEY",
             "ZAI_API_KEY",
+            "ANT_API_KEY",
+            "ANT_API_BASE",
             "CLAUDE_SMART_USE_LOCAL_CLI",
             "CLAUDE_SMART_USE_LOCAL_EMBEDDING",
         ]:

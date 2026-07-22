@@ -38,6 +38,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import socket
 import threading
 import time
@@ -100,8 +101,9 @@ class _EmbeddingDaemon:
                 log_level="warning",
             )
         )
+        self._previous_startup_warmup = os.environ.get("REFLEXIO_EMBED_STARTUP_WARMUP")
         self._thread = threading.Thread(
-            target=self._server.run,
+            target=self._run_with_startup_warmup,
             kwargs={"sockets": [self._sock]},
             daemon=True,
             name="test-embedding-daemon",
@@ -111,6 +113,10 @@ class _EmbeddingDaemon:
     @property
     def base_url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
+
+    def _run_with_startup_warmup(self, *, sockets):
+        os.environ["REFLEXIO_EMBED_STARTUP_WARMUP"] = "1"
+        self._server.run(sockets=sockets)
 
     def start(self, timeout: float = 90.0) -> None:
         self._thread.start()
@@ -136,6 +142,10 @@ class _EmbeddingDaemon:
         self._stopped = True
         self._server.should_exit = True
         self._thread.join(timeout=30)
+        if self._previous_startup_warmup is None:
+            os.environ.pop("REFLEXIO_EMBED_STARTUP_WARMUP", None)
+        else:
+            os.environ["REFLEXIO_EMBED_STARTUP_WARMUP"] = self._previous_startup_warmup
         with contextlib.suppress(OSError):
             self._sock.close()
 

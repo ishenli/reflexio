@@ -341,21 +341,81 @@ class ResumableExtractionAgent:
         # async-info tool handlers read ctx via getattr(ctx, "extra_tool_context",
         # ctx), so the bare context object can be passed directly.
         registry = ToolRegistry(list(extra_tools or []))
-        result = run_tool_loop(
-            client=self.client,
-            messages=messages,
-            registry=registry,
-            model_role=self.model_role,
-            max_steps=max_steps,
-            ctx=extra_tool_context,
-            response_format=output_schema,
-            tool_choice="auto",
-            log_label=log_label,
+        active_statuses = (AgentRunStatus.RUNNING, AgentRunStatus.RESUMING)
+        logger.info(
+            "event=extraction_agent_loop_start org_id=%s user_id=%s "
+            "extractor_kind=%s run_id=%s request_id=%s model_role=%s "
+            "max_steps=%d output_schema=%s tools=%d",
+            run.binding.org_id,
+            run.binding.user_id,
+            run.binding.extractor_kind,
+            run.id,
+            run.binding.request_id,
+            self.model_role.value,
+            max_steps,
+            output_schema.__name__,
+            len(getattr(registry, "_tools", {})),
         )
+        try:
+            result = run_tool_loop(
+                client=self.client,
+                messages=messages,
+                registry=registry,
+                model_role=self.model_role,
+                max_steps=max_steps,
+                ctx=extra_tool_context,
+                response_format=output_schema,
+                tool_choice="auto",
+                log_label=log_label,
+            )
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            stored_run = None
+            try:
+                stored_run = self.storage.update_agent_run_status(
+                    run.id,
+                    AgentRunStatus.FAILED,
+                    last_error=last_error,
+                    expected_statuses=active_statuses,
+                )
+            except Exception:
+                logger.exception(
+                    "event=extraction_agent_mark_failed_failed org_id=%s "
+                    "user_id=%s extractor_kind=%s run_id=%s request_id=%s "
+                    "last_error=%s",
+                    run.binding.org_id,
+                    run.binding.user_id,
+                    run.binding.extractor_kind,
+                    run.id,
+                    run.binding.request_id,
+                    last_error,
+                )
+            logger.exception(
+                "event=extraction_agent_exception org_id=%s user_id=%s "
+                "extractor_kind=%s run_id=%s request_id=%s model_role=%s "
+                "max_steps=%d output_schema=%s status_written=%s last_error=%s",
+                run.binding.org_id,
+                run.binding.user_id,
+                run.binding.extractor_kind,
+                run.id,
+                run.binding.request_id,
+                self.model_role.value,
+                max_steps,
+                output_schema.__name__,
+                stored_run.status.value if stored_run is not None else None,
+                last_error,
+            )
+            _record_agent_usage_event(
+                run=run,
+                event_name="extraction_agent_failed",
+                outcome="failed",
+                error_kind=type(exc).__name__,
+                metadata={"error": str(exc)},
+            )
+            raise
 
         output = result.structured_output
         committed_output = output.model_dump() if output is not None else None
-        active_statuses = (AgentRunStatus.RUNNING, AgentRunStatus.RESUMING)
         if (
             result.finished_reason == "structured_output"
             and committed_output is not None
@@ -423,14 +483,18 @@ class ResumableExtractionAgent:
             logger.warning(
                 "event=extraction_agent_failed org_id=%s user_id=%s "
                 "extractor_kind=%s run_id=%s request_id=%s "
-                "finished_reason=%s has_output=%s",
+                "model_role=%s output_schema=%s finished_reason=%s "
+                "has_output=%s max_steps_remaining=%s",
                 run.binding.org_id,
                 run.binding.user_id,
                 run.binding.extractor_kind,
                 run.id,
                 run.binding.request_id,
+                self.model_role.value,
+                output_schema.__name__,
                 result.finished_reason,
                 output is not None,
+                result.max_steps_remaining,
             )
             _record_agent_usage_event(
                 run=run,

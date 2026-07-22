@@ -191,6 +191,49 @@ class ToolLoopResult(BaseModel):
     structured_output: BaseModel | None = None
 
 
+def _run_structured_output_fallback(
+    *,
+    client: LiteLLMClient,
+    messages: list[dict[str, Any]],
+    model_role: ModelRole,
+    response_format: type[BaseModel],
+    ctx: Any,
+    max_steps: int,
+    trace: ToolLoopTrace,
+    pending_tool_call_ids: list[str],
+    log_label: str | None,
+) -> ToolLoopResult:
+    if log_label:
+        from reflexio.server.services.service_utils import (
+            log_llm_messages,
+            log_model_response,
+        )
+
+        log_llm_messages(logger, f"{log_label} (structured)", messages)
+    parsed = client.generate_chat_response(
+        messages=messages,
+        response_format=response_format,
+        model_role=model_role,
+    )
+    if log_label:
+        log_model_response(logger, f"{log_label} (structured)", parsed)
+    if not isinstance(parsed, BaseModel):
+        raise RuntimeError(
+            "Structured-output fallback returned unexpected type "
+            f"{type(parsed)}"
+        )
+    trace.finished = True
+    return ToolLoopResult(
+        ctx=ctx,
+        trace=trace,
+        finished_reason="structured_output",
+        structured_output=parsed,
+        messages=messages,
+        pending_tool_call_ids=pending_tool_call_ids,
+        max_steps_remaining=max_steps - 1,
+    )
+
+
 # Models we know support function calling per vendor docs but that litellm's
 # model_cost registry hasn't catalogued yet. When litellm returns False
 # (without raising) for one of the exact models or model-family prefixes below,
@@ -223,6 +266,11 @@ _TOOL_CALLING_OVERRIDES: tuple[str, ...] = (
     # `litellm.completion(model='minimax/MiniMax-M3', tools=[...])` round-trip
     # that returned a proper tool_call message (finish_reason='tool_calls').
     "minimax/MiniMax-M3",
+    # ant/* models route through the Ant Group (antchat) OpenAI-compatible
+    # endpoint. litellm has no registry entry for them, so it returns False.
+    # The endpoint supports function calling via the OpenAI-compatible tools
+    # protocol. Verified against the antchat API.
+    "ant/",
     # claude-code/* models route through our local CLI provider
     # (see providers/claude_code_provider.py). litellm has no registry
     # entry for them, so it returns False. The provider handles tool
@@ -230,6 +278,10 @@ _TOOL_CALLING_OVERRIDES: tuple[str, ...] = (
     # and parsing the model's JSON output back into ChatCompletionMessageToolCall
     # blocks. Verified end-to-end against the resumable extraction tool loop.
     "claude-code/",
+    # Internal Claude aliases such as claude-sonnet-5 can lag litellm's registry
+    # even though Anthropic Claude supports tool use. Keep them on the native
+    # tool-loop path so async info tools continue to work.
+    "claude-sonnet-",
 )
 
 
@@ -477,6 +529,104 @@ def _run_multi_stage_fallback(
     )
 
 
+def _run_capability_fallback(
+    *,
+    model: str,
+    client: LiteLLMClient,
+    messages: list[dict[str, Any]],
+    registry: ToolRegistry,
+    model_role: ModelRole,
+    max_steps: int,
+    ctx: Any,
+    finish_tool_name: str,
+    fallback_schema: type[BaseModel] | None,
+    fallback_tool_name: str | None,
+    multi_stage_schema: type[BaseModel] | None,
+    response_format: type[BaseModel] | None,
+    log_label: str | None,
+    trace: ToolLoopTrace,
+    pending_tool_call_ids: list[str],
+) -> ToolLoopResult:
+    if response_format is not None and not registry.openai_specs():
+        return _run_structured_output_fallback(
+            client=client,
+            messages=messages,
+            model_role=model_role,
+            response_format=response_format,
+            ctx=ctx,
+            max_steps=max_steps,
+            trace=trace,
+            pending_tool_call_ids=pending_tool_call_ids,
+            log_label=log_label,
+        )
+    if multi_stage_schema is not None:
+        return _run_multi_stage_fallback(
+            client=client,
+            messages=messages,
+            registry=registry,
+            model_role=model_role,
+            max_steps=max_steps,
+            ctx=ctx,
+            finish_tool_name=finish_tool_name,
+            multi_stage_schema=multi_stage_schema,
+            log_label=log_label,
+            trace=trace,
+            pending_tool_call_ids=pending_tool_call_ids,
+        )
+    if fallback_schema is None or fallback_tool_name is None:
+        raise RuntimeError(
+            f"Model {model} lacks tool-calling and no fallback_schema provided"
+        )
+
+    if log_label:
+        from reflexio.server.services.service_utils import (
+            log_llm_messages,
+            log_model_response,
+        )
+
+        log_llm_messages(logger, f"{log_label} (fallback)", messages)
+    parsed = client.generate_chat_response(
+        messages=messages,
+        response_format=fallback_schema,
+        model_role=model_role,
+    )
+    if log_label:
+        log_model_response(logger, f"{log_label} (fallback)", parsed)
+    if not isinstance(parsed, BaseModel):
+        raise RuntimeError(
+            f"Fallback structured call returned unexpected type {type(parsed)}"
+        )
+
+    items = getattr(parsed, next(iter(type(parsed).model_fields)))
+    bounded_items = items[:max_steps]
+    for item in bounded_items:
+        tool_t0 = time.monotonic()
+        outcome = registry.handle_outcome(
+            fallback_tool_name,
+            item.model_dump_json(),
+            ctx,
+        )
+        res = _tool_result_from_outcome(outcome, pending_tool_call_ids)
+        trace.turns.append(
+            ToolLoopTurn(
+                tool_name=fallback_tool_name,
+                args=item.model_dump(),
+                result=res,
+                latency_ms=int((time.monotonic() - tool_t0) * 1000),
+            )
+        )
+    exceeded = len(items) > max_steps
+    trace.finished = not exceeded
+    return ToolLoopResult(
+        ctx=ctx,
+        trace=trace,
+        finished_reason="max_steps" if exceeded else "finish_tool",
+        messages=messages,
+        pending_tool_call_ids=pending_tool_call_ids,
+        max_steps_remaining=0 if exceeded else max_steps - len(bounded_items),
+    )
+
+
 def run_tool_loop(
     client: LiteLLMClient,
     messages: list[dict[str, Any]],
@@ -576,72 +726,22 @@ def run_tool_loop(
 
     # ---- Capability fallback ------------------------------------------
     if not supports_tool_calling(model):
-        if multi_stage_schema is not None:
-            return _run_multi_stage_fallback(
-                client=client,
-                messages=messages,
-                registry=registry,
-                model_role=model_role,
-                max_steps=max_steps,
-                ctx=ctx,
-                finish_tool_name=finish_tool_name,
-                multi_stage_schema=multi_stage_schema,
-                log_label=log_label,
-                trace=trace,
-                pending_tool_call_ids=pending_tool_call_ids,
-            )
-        if fallback_schema is None or fallback_tool_name is None:
-            raise RuntimeError(
-                f"Model {model} lacks tool-calling and no fallback_schema provided"
-            )
-        if log_label:
-            log_llm_messages(logger, f"{log_label} (fallback)", messages)
-        parsed = client.generate_chat_response(
+        return _run_capability_fallback(
+            model=model,
+            client=client,
             messages=messages,
-            response_format=fallback_schema,
+            registry=registry,
             model_role=model_role,
-        )
-        if log_label:
-            log_model_response(logger, f"{log_label} (fallback)", parsed)
-        # The fallback path always passes response_format so the client
-        # returns a parsed BaseModel instance. Narrow the type so pyright
-        # can see model_fields is available.
-        if not isinstance(parsed, BaseModel):
-            raise RuntimeError(
-                f"Fallback structured call returned unexpected type {type(parsed)}"
-            )
-        # Expect the schema's first field to be a list of items whose
-        # ``model_dump_json()`` matches the fallback tool's args model.
-        items = getattr(parsed, next(iter(type(parsed).model_fields)))
-        # Respect the configured max_steps budget even on the fallback path
-        # — otherwise a non-tool-calling provider could blow past the loop
-        # cap when the structured response includes more items than expected.
-        bounded_items = items[:max_steps]
-        for item in bounded_items:
-            tool_t0 = time.monotonic()
-            outcome = registry.handle_outcome(
-                fallback_tool_name,
-                item.model_dump_json(),
-                ctx,
-            )
-            res = _tool_result_from_outcome(outcome, pending_tool_call_ids)
-            trace.turns.append(
-                ToolLoopTurn(
-                    tool_name=fallback_tool_name,
-                    args=item.model_dump(),
-                    result=res,
-                    latency_ms=int((time.monotonic() - tool_t0) * 1000),
-                )
-            )
-        exceeded = len(items) > max_steps
-        trace.finished = not exceeded
-        return ToolLoopResult(
+            max_steps=max_steps,
             ctx=ctx,
+            finish_tool_name=finish_tool_name,
+            fallback_schema=fallback_schema,
+            fallback_tool_name=fallback_tool_name,
+            multi_stage_schema=multi_stage_schema,
+            response_format=response_format,
+            log_label=log_label,
             trace=trace,
-            finished_reason="max_steps" if exceeded else "finish_tool",
-            messages=messages,
             pending_tool_call_ids=pending_tool_call_ids,
-            max_steps_remaining=0 if exceeded else max_steps - len(bounded_items),
         )
 
     # ---- Native tool loop ---------------------------------------------

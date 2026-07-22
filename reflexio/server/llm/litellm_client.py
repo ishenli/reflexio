@@ -7,6 +7,7 @@ using LiteLLM. It maintains the same interface as the existing LLMClient for eas
 
 import logging
 import os
+from typing import ClassVar
 
 import litellm
 
@@ -134,6 +135,9 @@ class LiteLLMClient(TextGenerationMixin, EmbeddingMixin, StructuredOutputMixin):
         "xai/": "xai",
     }
 
+    # Default API base URL for the Ant Group (antchat) OpenAI-compatible endpoint.
+    _ANT_API_BASE: ClassVar[str] = "https://antchat.alipay.com/v1"
+
     def __init__(self, config: LiteLLMConfig):
         """
         Initialize the LiteLLM client.
@@ -178,6 +182,14 @@ class LiteLLMClient(TextGenerationMixin, EmbeddingMixin, StructuredOutputMixin):
             tuple[Optional[str], Optional[str], Optional[str]]: (api_key, api_base, api_version)
         """
         if not self.config.api_key_config:
+            # Check if the model is an ant/* model — requires env var fallback
+            # since there's no api_key_config to hold the AntConfig.
+            model_to_check = model or self.config.model
+            if model_to_check.lower().startswith("ant/"):
+                api_key = os.environ.get("ANT_API_KEY")
+                api_base = os.environ.get("ANT_API_BASE", self._ANT_API_BASE)
+                if api_key:
+                    return api_key, api_base, None
             return None, None, None
 
         # Custom endpoint takes priority for non-embedding calls
@@ -235,6 +247,12 @@ class LiteLLMClient(TextGenerationMixin, EmbeddingMixin, StructuredOutputMixin):
         if "claude" in model_lower or "anthropic" in model_lower:
             if akc.anthropic:
                 return akc.anthropic.api_key, None, None
+            return None, None, None
+
+        # Ant Group (antchat) — has its own api_base
+        if model_lower.startswith("ant/"):
+            if akc.ant:
+                return akc.ant.api_key, akc.ant.api_base, None
             return None, None, None
 
         # OpenAI models (default fallback)

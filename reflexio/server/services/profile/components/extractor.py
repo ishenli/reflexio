@@ -217,10 +217,13 @@ class ProfileExtractor:
                 existing_profiles=context_profiles,
             )
         except Exception as e:
-            logger.error(
-                "event=profile_extract_failed user_id=%s extractor_name=%s error_type=%s error=%s",
+            logger.exception(
+                "event=profile_extract_failed user_id=%s request_id=%s "
+                "extractor_name=%s source=%s error_type=%s error=%s",
                 self.service_config.user_id,
+                self.service_config.request_id,
                 get_extractor_name(self.config),
+                self.service_config.source,
                 type(e).__name__,
                 str(e),
             )

@@ -42,6 +42,15 @@ TExtractorConfig = TypeVar("TExtractorConfig")
 TGenerationServiceConfig = TypeVar("TGenerationServiceConfig")
 
 
+def _exception_chain_message(exc: BaseException) -> str:
+    messages = [f"{type(exc).__name__}: {exc}"]
+    cause = exc.__cause__ or exc.__context__
+    while cause is not None:
+        messages.append(f"{type(cause).__name__}: {cause}")
+        cause = cause.__cause__ or cause.__context__
+    return " caused by ".join(messages)
+
+
 class ExtractionRunLifecycleMixin(Generic[TExtractorConfig, TGenerationServiceConfig]):  # noqa: UP046
     """Extractor execution + agent-run terminal-state transitions.
 
@@ -153,9 +162,10 @@ class ExtractionRunLifecycleMixin(Generic[TExtractorConfig, TGenerationServiceCo
             raise ExtractorExecutionError(error_msg) from exc
         except Exception as exc:
             self._last_extractor_run_stats = {"total": 1, "failed": 1, "timed_out": 0}
+            details = _exception_chain_message(exc)
             error_msg = (
                 f"Extractor failed for {self._get_service_name()} "
-                f"identifier={identifier}: {exc} (type={type(exc).__name__})"
+                f"identifier={identifier}: {details}"
             )
             logger.error(error_msg)
             raise ExtractorExecutionError(error_msg) from exc

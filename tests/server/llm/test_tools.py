@@ -482,6 +482,39 @@ def test_run_tool_loop_capability_fallback_uses_response_format(monkeypatch):
     assert ctx.emitted == ["x", "y"]
 
 
+def test_run_tool_loop_structured_output_without_tool_calling(monkeypatch):
+    """Extraction can finish with response_format even when model lacks tools."""
+    from reflexio.server.llm import tools as tools_mod
+
+    monkeypatch.setattr(tools_mod, "supports_tool_calling", lambda _model: False)
+
+    config = LiteLLMConfig(model="gpt-5.5")
+    client = LiteLLMClient(config)
+
+    class StructuredFinish(BaseModel):
+        value: str
+
+    fake_parsed = StructuredFinish(value="ok")
+
+    def fake_generate_chat_response(**kwargs):
+        assert kwargs["response_format"] is StructuredFinish
+        return fake_parsed
+
+    monkeypatch.setattr(client, "generate_chat_response", fake_generate_chat_response)
+
+    result = run_tool_loop(
+        client=client,
+        messages=[{"role": "user", "content": "go"}],
+        registry=ToolRegistry([]),
+        model_role=ModelRole.EXTRACTION_AGENT,
+        response_format=StructuredFinish,
+    )
+
+    assert result.finished_reason == "structured_output"
+    assert result.trace.finished is True
+    assert result.structured_output is fake_parsed
+
+
 def test_run_tool_loop_returns_error_on_client_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

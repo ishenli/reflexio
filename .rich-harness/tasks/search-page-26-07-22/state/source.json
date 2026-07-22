@@ -1,0 +1,28 @@
+{
+  "yuyanId": null,
+  "appName": "docs",
+  "repoUrl": "https://github.com/ishenli/reflexio.git",
+  "repoDir": "/Users/michael.sl/GitHub/reflexio",
+  "workDir": "/Users/michael.sl/GitHub/reflexio",
+  "personalBranch": "haomo-modify",
+  "sprintId": null,
+  "sprintBranch": null,
+  "sprintUrl": null,
+  "yuqueUrl": null,
+  "dimaUrl": null,
+  "dima": null,
+  "preparedAt": "2026-07-22T00:00:00.000Z",
+  "startupPreferences": {
+    "workflow": {
+      "type": "explicit",
+      "value": "auto",
+      "source": "user-selection"
+    }
+  },
+  "workflowDecision": {
+    "type": "auto",
+    "steps": ["gen-tech-design", "code-impl", "local-acceptance"],
+    "confirmedBy": "user-selection",
+    "confirmedAt": "2026-07-22T06:30:00.000Z"
+  }
+}

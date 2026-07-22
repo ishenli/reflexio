@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "framework": "unknown",
+  "project": {
+    "framework": "unknown",
+    "appType": "unknown"
+  },
+  "repo": "https://github.com/ishenli/reflexio.git",
+  "harness_version": "1.4.6",
+  "initialized_at": "2026-07-22T06:29:59.602Z"
+}

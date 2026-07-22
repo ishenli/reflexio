@@ -327,6 +327,19 @@ class XAIConfig(BaseModel):
     api_key: NonEmptyStr
 
 
+class AntConfig(BaseModel):
+    """Ant Group (antchat) API configuration.
+
+    Args:
+        api_key (str): API key for the ant endpoint.
+        api_base (str): Base URL of the ant endpoint (e.g., 'https://antchat.alipay.com/v1').
+            Defaults to 'https://antchat.alipay.com/v1'.
+    """
+
+    api_key: NonEmptyStr
+    api_base: str = "https://antchat.alipay.com/v1"
+
+
 class CustomEndpointConfig(BaseModel):
     """Custom OpenAI-compatible endpoint configuration.
 
@@ -348,9 +361,9 @@ class APIKeyConfig(BaseModel):
     API key configuration for LLM providers.
 
     Supports OpenAI (direct and Azure), Anthropic, OpenRouter, Google Gemini, MiniMax,
-    DeepSeek, DashScope (Qwen), Zhipu AI (GLM), Moonshot (Kimi), xAI (Grok), and custom
-    OpenAI-compatible endpoints. When custom_endpoint is configured with non-empty fields,
-    it takes priority over all other providers for LLM completion calls (but not embeddings).
+    DeepSeek, DashScope (Qwen), Zhipu AI (GLM), Moonshot (Kimi), xAI (Grok), Ant (antchat),
+    and custom OpenAI-compatible endpoints. When custom_endpoint is configured with non-empty
+    fields, it takes priority over all other providers for LLM completion calls (but not embeddings).
     """
 
     custom_endpoint: CustomEndpointConfig | None = None
@@ -364,6 +377,7 @@ class APIKeyConfig(BaseModel):
     zai: ZAIConfig | None = None
     moonshot: MoonshotConfig | None = None
     xai: XAIConfig | None = None
+    ant: AntConfig | None = None
 
 
 class DeduplicationConfig(BaseModel):

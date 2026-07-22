@@ -34,6 +34,8 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "XAI_API_KEY",
         "MOONSHOT_API_KEY",
         "ZAI_API_KEY",
+        "ANT_API_KEY",
+        "ANT_API_BASE",
         "CLAUDE_SMART_USE_LOCAL_CLI",
         "CLAUDE_SMART_CLI_PATH",
         "CLAUDE_SMART_CLI_TIMEOUT",

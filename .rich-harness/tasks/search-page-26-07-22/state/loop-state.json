@@ -1,0 +1,125 @@
+{
+  "runId": "20260722143435",
+  "task": "search-page-26-07-22",
+  "status": "completed",
+  "registryVersion": 9,
+  "snapshotAt": "2026-07-22T06:34:11.821Z",
+  "steps": [
+    {
+      "id": "gen-tech-design",
+      "kind": "core",
+      "phase": "design",
+      "inputs": [
+        "requirements"
+      ],
+      "provider": {
+        "type": "skill",
+        "ref": "rich-harness:gen-tech-design"
+      },
+      "outputs": [
+        {
+          "artifact": "techDesign",
+          "path": ".rich-harness/tasks/search-page-26-07-22/spec/tech-design.md"
+        },
+        {
+          "artifact": "apiDesign",
+          "path": ".rich-harness/tasks/search-page-26-07-22/spec/api-design.md"
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "code-impl",
+      "kind": "core",
+      "phase": "code",
+      "inputs": [
+        "techDesign",
+        "apiDesign"
+      ],
+      "provider": {
+        "type": "skill",
+        "ref": "rich-harness:code-impl"
+      },
+      "outputs": [
+        {
+          "artifact": "taskList",
+          "path": ".rich-harness/tasks/search-page-26-07-22/spec/task-list.md"
+        },
+        {
+          "artifact": "implSummary",
+          "path": ".rich-harness/tasks/search-page-26-07-22/logs/impl-summary.md"
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "code-reviewer",
+      "kind": "gate",
+      "phase": "code",
+      "inputs": [
+        "implSummary",
+        "techDesign"
+      ],
+      "provider": {
+        "type": "skill",
+        "ref": "rich-harness:code-reviewer"
+      },
+      "outputs": [
+        {
+          "artifact": "codeReviewReport",
+          "path": ".rich-harness/tasks/search-page-26-07-22/evidence/code-review-report.json"
+        }
+      ],
+      "evidence": [
+        "codeReviewReport"
+      ],
+      "gate": {
+        "blocking": true,
+        "onFail": "code-impl",
+        "onFailPolicy": {
+          "retry": "code-impl",
+          "maxRetries": 3
+        }
+      }
+    }
+  ],
+  "execution": {
+    "currentStep": null,
+    "steps": {
+      "gen-tech-design": {
+        "status": "completed",
+        "reopenCount": 0,
+        "attempt": 0,
+        "completedAt": "2026-07-22T06:41:11.612Z"
+      },
+      "code-impl": {
+        "status": "completed",
+        "reopenCount": 0,
+        "attempt": 1,
+        "startedAt": "2026-07-22T06:42:16.039Z",
+        "completedAt": "2026-07-22T06:48:29.568Z",
+        "durationMs": 373529
+      },
+      "code-reviewer": {
+        "status": "completed",
+        "reopenCount": 0,
+        "attempt": 1,
+        "completedAt": "2026-07-22T06:53:00.000Z"
+      }
+    },
+    "artifacts": {
+      "completionEvaluationReport": ".rich-harness/tasks/search-page-26-07-22/evidence/completion-evaluation.json"
+    },
+    "iteration": 1,
+    "maxIterations": 5,
+    "stopGuard": {
+      "active": true,
+      "activatedAt": "2026-07-22T06:34:35.559Z",
+      "reason": "loop_running"
+    }
+  },
+  "observability": {
+    "schemaVersion": 2,
+    "workflowRevision": 0
+  }
+}

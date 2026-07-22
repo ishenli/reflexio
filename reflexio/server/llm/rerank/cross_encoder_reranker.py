@@ -45,12 +45,16 @@ _MODEL_NAME = RERANK_MODEL
 _DEVICE_ENV_VAR = "REFLEXIO_RERANK_DEVICE"
 _SERVICE_URL_ENV_VAR = "REFLEXIO_RERANK_SERVICE_URL"
 _SERVICE_TIMEOUT_MS_ENV_VAR = "REFLEXIO_RERANK_SERVICE_TIMEOUT_MS"
+_PREWARM_ENV_VAR = "REFLEXIO_RERANK_STARTUP_PREWARM"
+_PREWARM_SYNC_ENV_VAR = "REFLEXIO_RERANK_PREWARM_SYNC"
 _DEFAULT_SERVICE_TIMEOUT_MS = 5_000
 
 # Singleton state — never accessed directly outside ``_get_model``.
 _MODEL: Any | None = None
 _MODEL_LOCK = threading.Lock()
 _PREDICT_LOCK = threading.Lock()
+_PREWARM_STARTED = False
+_PREWARM_LOCK = threading.Lock()
 
 
 class CrossEncoderUnavailableError(RuntimeError):
@@ -293,3 +297,43 @@ def prewarm() -> bool:
         return False
     _LOGGER.info("Cross-encoder pre-warmed.")
     return True
+
+
+def prewarm_async() -> bool:
+    """Start cross-encoder pre-warm without blocking application startup.
+
+    Set ``REFLEXIO_RERANK_PREWARM_SYNC=1`` to keep the old synchronous startup
+    behavior for deployments that prefer readiness to include a warm reranker.
+
+    Returns:
+        True when a pre-warm was started or completed by this call, False when
+        another background pre-warm was already started.
+    """
+    if env_str(_PREWARM_SYNC_ENV_VAR).lower() in {"1", "true", "yes", "on"}:
+        return prewarm()
+
+    global _PREWARM_STARTED  # noqa: PLW0603 — process-wide startup guard
+    with _PREWARM_LOCK:
+        if _PREWARM_STARTED:
+            return False
+        _PREWARM_STARTED = True
+
+    thread = threading.Thread(
+        target=prewarm,
+        daemon=True,
+        name="cross-encoder-prewarm",
+    )
+    thread.start()
+    _LOGGER.info("Cross-encoder pre-warm started in background.")
+    return True
+
+
+def maybe_start_prewarm() -> bool:
+    """Start startup pre-warm only when explicitly enabled."""
+    if env_str(_PREWARM_ENV_VAR).lower() not in {"1", "true", "yes", "on"}:
+        _LOGGER.info(
+            "Cross-encoder startup pre-warm skipped; set %s=1 to enable.",
+            _PREWARM_ENV_VAR,
+        )
+        return False
+    return prewarm_async()

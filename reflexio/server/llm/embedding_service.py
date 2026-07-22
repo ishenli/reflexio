@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from reflexio.server.env_utils import env_truthy
 from reflexio.server.llm.llm_utils import positive_int_env
 from reflexio.server.llm.providers.local_embedding_provider import LocalEmbedder
 from reflexio.server.llm.providers.nomic_embedding_provider import (
@@ -60,6 +61,7 @@ _DEFAULT_MICRO_BATCH_DELAY_MS = 5
 _DEFAULT_MICRO_BATCH_MAX_TEXTS = 64
 _ENV_MICRO_BATCH_DELAY_MS = "REFLEXIO_EMBED_MICRO_BATCH_DELAY_MS"
 _ENV_MICRO_BATCH_MAX_TEXTS = "REFLEXIO_EMBED_MICRO_BATCH_MAX_TEXTS"
+_ENV_STARTUP_WARMUP = "REFLEXIO_EMBED_STARTUP_WARMUP"
 _MICRO_BATCH_CONDITION = threading.Condition()
 _MICRO_BATCH_QUEUE: list[_EmbeddingJob] = []
 _ACTIVE_BATCH_PROCESSORS = 0
@@ -146,7 +148,7 @@ def create_embedding_app(default_model: str | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        if not default_model:
+        if not default_model or not env_truthy(os.environ.get(_ENV_STARTUP_WARMUP, "")):
             yield
             return
         try:
