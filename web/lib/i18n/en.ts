@@ -320,7 +320,7 @@ export const en: LocaleDict = {
   },
 
   topBar: {
-    apiDocs: "Reflexio API Docs",
+    apiDocs: "Reflexio",
     apiReference: "API Reference",
   },
 

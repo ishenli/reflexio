@@ -5,8 +5,8 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 
 export const metadata: Metadata = {
-  title: "Reflexio API Docs",
-  description: "Interactive API documentation for Reflexio",
+  title: "Reflexio",
+  description: "Self Improving AI Agent Platform",
   icons: {
     icon: "/reflexio_fav.svg",
   },

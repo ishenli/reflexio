@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Reflexio API Docs",
+  title: "Reflexio",
   description: "Interactive API documentation for Reflexio",
   icons: {
     icon: "/reflexio_fav.svg",
