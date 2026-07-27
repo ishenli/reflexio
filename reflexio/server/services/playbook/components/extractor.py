@@ -17,11 +17,11 @@ from reflexio.server.services.extraction.resumable_agent import (
     run_resumable_extraction_agent,
 )
 from reflexio.server.services.extractor_config_utils import get_extractor_name
-from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.extractor_interaction_utils import (
     get_effective_source_filter,
     get_extractor_window_params,
 )
+from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.operation_state_utils import OperationStateManager
 from reflexio.server.services.playbook.playbook_service_utils import (
     StructuredPlaybookContent,
@@ -246,6 +246,15 @@ class PlaybookExtractor:
             for interaction in ridm.interactions
             if interaction.interaction_id
         ]
+        all_interactions = extract_interactions_from_request_interaction_data_models(
+            request_interaction_data_models
+        )
+        source_text = "\n".join(
+            part
+            for interaction in all_interactions
+            for part in (interaction.content, interaction.expert_content)
+            if part
+        )
 
         # Check if mock mode is enabled
         if os.getenv("MOCK_LLM_RESPONSE", "").lower() == "true":
@@ -259,7 +268,9 @@ class PlaybookExtractor:
                 [entry.content for entry in mock_response.playbooks],
             )
             return self._process_structured_response_list(
-                mock_response, source_interaction_ids=source_interaction_ids
+                mock_response,
+                source_interaction_ids=source_interaction_ids,
+                source_text=source_text,
             )
 
         # Get tool_can_use from root config
@@ -274,9 +285,6 @@ class PlaybookExtractor:
             )
 
         # Check if interactions contain expert content — use expert extraction path
-        all_interactions = extract_interactions_from_request_interaction_data_models(
-            request_interaction_data_models
-        )
         playbook_definition = (
             self.config.extraction_definition_prompt.strip()
             if self.config.extraction_definition_prompt
@@ -333,6 +341,7 @@ class PlaybookExtractor:
         return self._process_structured_response_list(
             result.output,
             source_interaction_ids=source_interaction_ids,
+            source_text=source_text,
         )
 
     def _generate_mock_playbook_list(
@@ -370,6 +379,7 @@ class PlaybookExtractor:
         entry = StructuredPlaybookContent(
             content=f"When {trigger}, improve on {playbook_definition} by adjusting the current approach.",
             trigger=trigger,
+            source_span=interactions[-1].content if interactions else None,
         )
         return StructuredPlaybookList(playbooks=[entry])
 
@@ -377,6 +387,7 @@ class PlaybookExtractor:
         self,
         response: StructuredPlaybookList,
         source_interaction_ids: list[int],
+        source_text: str,
     ) -> list[UserPlaybook]:
         """
         Process a structured playbook list from the LLM into UserPlaybook entries.
@@ -394,7 +405,9 @@ class PlaybookExtractor:
         """
         user_playbooks: list[UserPlaybook] = []
         for entry in response.playbooks:
-            playbook = self._build_user_playbook(entry, source_interaction_ids)
+            playbook = self._build_user_playbook(
+                entry, source_interaction_ids, source_text
+            )
             if playbook is not None:
                 user_playbooks.append(playbook)
 
@@ -414,6 +427,7 @@ class PlaybookExtractor:
         self,
         entry: StructuredPlaybookContent,
         source_interaction_ids: list[int],
+        source_text: str,
     ) -> UserPlaybook | None:
         """
         Convert one StructuredPlaybookContent entry into a UserPlaybook.
@@ -425,7 +439,11 @@ class PlaybookExtractor:
         Returns:
             UserPlaybook | None: The constructed playbook, or None if the entry has no usable content
         """
-        if not entry.has_content:
+        if (
+            not entry.is_structured
+            or not entry.source_span
+            or entry.source_span.strip() not in source_text
+        ):
             return None
 
         playbook_content = ensure_playbook_content(entry.content, entry)
@@ -439,4 +457,5 @@ class PlaybookExtractor:
             trigger=entry.trigger,
             rationale=entry.rationale,
             source_interaction_ids=source_interaction_ids,
+            source_span=entry.source_span.strip(),
         )

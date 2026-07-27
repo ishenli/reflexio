@@ -641,6 +641,7 @@ class TestResumableAgentPath:
                         "trigger": "User asks about deployments",
                         "content": "Prefer ECS deployment guidance.",
                         "rationale": "The workspace uses AWS ECS.",
+                        "source_span": "Could be faster",
                     }
                 ]
             },
@@ -668,6 +669,7 @@ class TestResumableAgentPath:
         assert len(playbooks) == 1
         assert playbooks[0].content == "Prefer ECS deployment guidance."
         assert playbooks[0].source_interaction_ids == [1, 2, 3]
+        assert playbooks[0].source_span == "Could be faster"
         row = sqlite_storage.conn.execute("SELECT id FROM _agent_runs").fetchone()
         assert row is not None
         run = sqlite_storage.get_agent_run(row["id"])
@@ -741,6 +743,7 @@ class TestStructuredPlaybookExtraction:
                     {
                         "trigger": "assisting technical users",
                         "content": "ask for CLI preference before proceeding",
+                        "source_span": "Could be faster",
                     }
                 ]
             },
@@ -787,6 +790,7 @@ class TestStructuredPlaybookExtraction:
                     {
                         "trigger": "user asks for help",
                         "content": "provide step-by-step instructions",
+                        "source_span": "Could be faster",
                     }
                 ]
             },
@@ -910,9 +914,12 @@ class TestBuildUserPlaybook:
         entry = StructuredPlaybookContent(
             trigger="processing external data",
             content="validate inputs before processing",
+            source_span="source evidence",
         )
 
-        result = extractor._build_user_playbook(entry, source_interaction_ids=[])
+        result = extractor._build_user_playbook(
+            entry, source_interaction_ids=[], source_text="source evidence"
+        )
 
         assert result is not None
         assert result.trigger == "processing external data"
@@ -939,7 +946,9 @@ class TestBuildUserPlaybook:
         # No playbook: trigger and content both None
         entry = StructuredPlaybookContent()
 
-        result = extractor._build_user_playbook(entry, source_interaction_ids=[])
+        result = extractor._build_user_playbook(
+            entry, source_interaction_ids=[], source_text=""
+        )
 
         assert result is None
 
@@ -962,10 +971,11 @@ class TestBuildUserPlaybook:
         entry = StructuredPlaybookContent(
             trigger="processing external data",
             content="validate inputs",
+            source_span="source evidence",
         )
 
         result = extractor._build_user_playbook(
-            entry, source_interaction_ids=[10, 20, 30]
+            entry, source_interaction_ids=[10, 20, 30], source_text="source evidence"
         )
 
         assert result is not None
@@ -990,7 +1000,7 @@ class TestBuildUserPlaybook:
         response = StructuredPlaybookList(playbooks=[])
 
         result = extractor._process_structured_response_list(
-            response, source_interaction_ids=[]
+            response, source_interaction_ids=[], source_text=""
         )
 
         assert result == []
@@ -1016,6 +1026,7 @@ class TestBuildUserPlaybook:
                 StructuredPlaybookContent(
                     trigger="processing external data",
                     content="validate inputs",
+                    source_span="source evidence",
                 ),
                 # No content + no trigger → has_content == False, must be filtered out
                 StructuredPlaybookContent(),
@@ -1023,7 +1034,7 @@ class TestBuildUserPlaybook:
         )
 
         result = extractor._process_structured_response_list(
-            response, source_interaction_ids=[7, 8]
+            response, source_interaction_ids=[7, 8], source_text="source evidence"
         )
 
         assert len(result) == 1
@@ -1051,16 +1062,20 @@ class TestBuildUserPlaybook:
                 StructuredPlaybookContent(
                     trigger="user asks for help debugging an error",
                     content="When users ask for debugging help, explain the root cause before proposing fixes.",
+                    source_span="first source",
                 ),
                 StructuredPlaybookContent(
                     trigger="agent provides a factual correction during debugging",
                     content="Reserve apologies for genuine mistakes, not routine corrections.",
+                    source_span="second source",
                 ),
             ]
         )
 
         result = extractor._process_structured_response_list(
-            response, source_interaction_ids=[1, 2, 3]
+            response,
+            source_interaction_ids=[1, 2, 3],
+            source_text="first source\nsecond source",
         )
 
         assert len(result) == 2
@@ -1167,6 +1182,7 @@ class TestRationaleRoundTrip:
                         "rationale": "Users need to understand the approach before seeing code",
                         "trigger": "User asks for debugging help",
                         "content": "Outline strategy before writing code",
+                        "source_span": "Could be faster",
                     }
                 ]
             },
@@ -1226,9 +1242,14 @@ class TestPlaybookContentExtraction:
             content="Agent should check accounts directly when users report persistent login issues after prior attempts.",
             trigger="User reports a login issue after already trying password reset",
             rationale="The agent ignored the user's prior attempt, causing frustration.",
+            source_span="The agent ignored the user's prior attempt",
         )
 
-        result = extractor._build_user_playbook(entry, source_interaction_ids=[])
+        result = extractor._build_user_playbook(
+            entry,
+            source_interaction_ids=[],
+            source_text="The agent ignored the user's prior attempt",
+        )
 
         assert result is not None
         # playbook content is the LLM's freeform summary
@@ -1266,12 +1287,14 @@ class TestPlaybookContentExtraction:
             trigger="User asks for help debugging",
         )
 
-        result = extractor._build_user_playbook(entry, source_interaction_ids=[])
+        result = extractor._build_user_playbook(
+            entry, source_interaction_ids=[], source_text=""
+        )
 
         # Without content, the entry has no actionable content and is rejected
         assert result is None
 
-    def test_playbook_content_only_still_works(
+    def test_playbook_content_only_is_rejected(
         self,
         request_context,
         mock_llm_client,
@@ -1291,13 +1314,11 @@ class TestPlaybookContentExtraction:
             content="Agent over-apologizes when delivering factual corrections",
         )
 
-        result = extractor._build_user_playbook(entry, source_interaction_ids=[])
-
-        assert result is not None
-        assert (
-            result.content
-            == "Agent over-apologizes when delivering factual corrections"
+        result = extractor._build_user_playbook(
+            entry, source_interaction_ids=[], source_text=""
         )
+
+        assert result is None
 
     def test_end_to_end_with_playbook_content(
         self,
@@ -1340,6 +1361,7 @@ class TestPlaybookContentExtraction:
                     {
                         "content": "Agent should limit apologies and focus on clear, concise responses during billing inquiries.",
                         "trigger": "User reports a billing concern",
+                        "source_span": "Could be faster",
                     }
                 ]
             },

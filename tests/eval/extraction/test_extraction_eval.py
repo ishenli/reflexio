@@ -244,6 +244,7 @@ def test_live_extraction_provider_returns_canned_items(tmp_path):
                     "trigger": "user states a UI preference",
                     "content": "Default the workspace to dark mode for this user.",
                     "rationale": "User explicitly asked for dark mode.",
+                    "source_span": "I prefer dark mode.",
                 }
             ]
         },

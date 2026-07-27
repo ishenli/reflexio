@@ -11,7 +11,8 @@ package adds the **runner** that wires them together (load → extract / supply 
 judge → aggregate).
 
 > **This is bounded scaffolding plus a tiny illustrative fixture, not a
-> curated eval dataset.** The cases in `../golden_set/extraction/*.yaml` exist
+> curated eval dataset.** The cases in
+> `../golden_set/extraction/{dev,validation,holdout}/` exist
 > only to exercise the harness end-to-end.
 
 ## What it reuses (not re-implemented here)
@@ -20,7 +21,7 @@ judge → aggregate).
 | --- | --- | --- |
 | `LLMJudge.score(*, expected, actual)` | `tests/eval/judge.py` | the shared judge — returns `JudgeScore{signal_f1, answer_correctness, grounded_rate, rationale}` |
 | `extraction_rubric.yaml` | `tests/eval/judge_prompts/` | the extraction rubric (`{expected}` / `{actual}`) |
-| golden cases | `tests/eval/golden_set/extraction/*.yaml` | `id`, `sessions`, `expected_profiles`, `expected_playbooks`, `must_NOT_include_profiles`, `notes_for_judge` |
+| golden cases | `tests/eval/golden_set/extraction/{dev,validation,holdout}/*.yaml` | `id`, `category`, `sessions`, `expected_profiles`, `expected_playbooks`, `must_NOT_include_profiles`, `notes_for_judge` |
 | `extraction_case` / `extraction_judge` fixtures | `tests/eval/conftest.py` | parametrize over cases; provide a stub judge (or real LLM under `REFLEXIO_EVAL_REAL_JUDGE=1`) |
 
 This package adds only `runner.py` (`run_eval` / `score_case` / `EvalResults` /
@@ -45,6 +46,15 @@ The judge scores each case on two dimensions in `[0, 1]`:
 
 There is **no kind label or confusion matrix** — extraction is graded, not
 classified.
+
+## Case splits
+
+- `dev/`: prompt and validation work.
+- `validation/`: candidate-version selection.
+- `holdout/`: frozen final acceptance cases.
+
+Each expected playbook should include `trigger`, `content`, and a verbatim
+`source_span`. Cases may set `category` for later per-category reporting.
 
 ## Running
 

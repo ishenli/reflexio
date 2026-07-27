@@ -1,4 +1,6 @@
 id: superseded_state
+split: dev
+category: supersession
 description: User explicitly supersedes an earlier statement within the same session.
 sessions:
   - role: user

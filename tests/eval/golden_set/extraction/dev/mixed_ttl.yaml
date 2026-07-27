@@ -1,4 +1,6 @@
 id: mixed_ttl
+split: dev
+category: preference_and_context
 description: Single user message mixes a persistent preference with a short-term context item.
 sessions:
   - role: user
@@ -13,6 +15,7 @@ expected_profiles:
 expected_playbooks:
   - trigger: "scheduling a review during user's on-call week"
     content: "avoid times before 10am"
+    source_span: "please avoid scheduling reviews before 10am"
     reader_angle: "behavior"
 notes_for_judge: |
   Tests whether extraction distinguishes persistent identity (role) from

@@ -1,4 +1,6 @@
 id: polars_vs_pandas
+split: dev
+category: preference
 description: |
   User explicitly states a tool-preference fact: polars is preferred over pandas,
   because of lazy evaluation and strict dtypes. Includes supersession signal
@@ -22,6 +24,7 @@ expected_profiles:
 expected_playbooks:
   - trigger: "user asks for DataFrame code for new work"
     content: "use polars, not pandas"
+    source_span: "I don't want agents to suggest pandas for new code."
     rationale_must_mention: ["lazy", "dtype"]
     reader_angle: "rationale"
 notes_for_judge: |

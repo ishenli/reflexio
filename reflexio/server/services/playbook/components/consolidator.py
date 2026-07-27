@@ -18,10 +18,6 @@ from reflexio.models.config_schema import (
 )
 from reflexio.models.structured_output import StrictStructuredOutput
 from reflexio.server.api_endpoints.request_context import RequestContext
-from reflexio.server.services.language_utils import (
-    content_language_instruction,
-    resolve_language,
-)
 from reflexio.server.llm.litellm_client import (
     LiteLLMClient,
     LiteLLMClientError,
@@ -32,6 +28,7 @@ from reflexio.server.services.deduplication_utils import (
     format_dedup_timestamp,
     resolve_dedup_query_embeddings,
 )
+from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.profile.profile_generation_service_utils import (
     check_string_token_overlap,
 )
@@ -1262,6 +1259,7 @@ class PlaybookConsolidator(BaseDeduplicator):
             status=primary_candidate.status,
             source=primary_candidate.source,
             source_interaction_ids=combined_source_ids,
+            source_span=primary_candidate.source_span,
         )
         return [unified_row], new_ids, merge_source_ids
 

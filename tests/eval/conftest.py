@@ -34,7 +34,7 @@ def _load(kind: str) -> list[dict[str, Any]]:
         ValueError: If a golden YAML file is missing an ``id`` key.
     """
     cases: list[dict[str, Any]] = []
-    for path in (_GOLDEN / kind).glob("*.yaml"):
+    for path in (_GOLDEN / kind).rglob("*.yaml"):
         case = yaml.safe_load(path.read_text())
         if "id" not in case:
             raise ValueError(f"Golden case {path} is missing required 'id' key")
