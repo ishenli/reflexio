@@ -2,6 +2,7 @@
 
 import { TrendingUp, Users, BookOpen, MessageSquare, Activity } from "lucide-react";
 import { useSettings } from "@/hooks/use-settings";
+import { useLocale } from "@/lib/i18n/context";
 import { useDashboardData } from "./use-dashboard-data";
 import { StatCard } from "./stat-card";
 import { TimeSeriesChart } from "./time-series-chart";
@@ -10,6 +11,7 @@ import { TimeRangeSelector } from "./time-range-selector";
 
 export function DashboardView() {
   const { apiEndpoint } = useSettings();
+  const { t } = useLocale();
   const { data, loading, error, daysBack, setDaysBack } = useDashboardData(apiEndpoint);
 
   const current = data.stats?.current_period;
@@ -38,9 +40,9 @@ export function DashboardView() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t.dashboard.dashboardTitle}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Overview of your Reflexio instance metrics
+            {t.dashboard.dashboardDesc}
           </p>
         </div>
         <TimeRangeSelector value={daysBack} onChange={setDaysBack} />
@@ -65,38 +67,38 @@ export function DashboardView() {
           {/* Stats cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              title="Interactions"
+              title={t.dashboard.statInteractions}
               value={current?.total_interactions ?? 0}
-              description="Total interactions in period"
+              description={t.dashboard.statInteractionsDesc}
               delta={interactionsDelta}
-              deltaLabel="vs previous period"
+              deltaLabel={t.dashboard.vsPreviousPeriod}
               icon={MessageSquare}
               iconClassName="bg-blue-500/10 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400"
             />
             <StatCard
-              title="User Profiles"
+              title={t.dashboard.statUserProfiles}
               value={current?.total_profiles ?? 0}
-              description="Active user profiles"
+              description={t.dashboard.statUserProfilesDesc}
               delta={profilesDelta}
-              deltaLabel="vs previous period"
+              deltaLabel={t.dashboard.vsPreviousPeriod}
               icon={Users}
               iconClassName="bg-violet-500/10 [&>svg]:text-violet-600 dark:[&>svg]:text-violet-400"
             />
             <StatCard
-              title="Playbooks"
+              title={t.dashboard.statPlaybooks}
               value={current?.total_playbooks ?? 0}
-              description="Active playbooks"
+              description={t.dashboard.statPlaybooksDesc}
               delta={playbooksDelta}
-              deltaLabel="vs previous period"
+              deltaLabel={t.dashboard.vsPreviousPeriod}
               icon={BookOpen}
               iconClassName="bg-amber-500/10 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400"
             />
             <StatCard
-              title="Success Rate"
+              title={t.dashboard.statSuccessRate}
               value={current?.success_rate ?? 0}
-              description="Agent success rate"
+              description={t.dashboard.statSuccessRateDesc}
               delta={successDelta}
-              deltaLabel="vs previous period"
+              deltaLabel={t.dashboard.vsPreviousPeriod}
               icon={TrendingUp}
               iconClassName="bg-emerald-500/10 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-400"
               format="percent"
@@ -107,22 +109,22 @@ export function DashboardView() {
           <div className="grid gap-4 lg:grid-cols-2">
             <TimeSeriesChart
               data={data.stats?.interactions_time_series ?? []}
-              title="Interactions Over Time"
+              title={t.dashboard.chartInteractions}
               color="var(--chart-1)"
             />
             <TimeSeriesChart
               data={data.stats?.profiles_time_series ?? []}
-              title="Profiles Over Time"
+              title={t.dashboard.chartProfiles}
               color="var(--chart-2)"
             />
             <TimeSeriesChart
               data={data.stats?.playbooks_time_series ?? []}
-              title="Playbooks Over Time"
+              title={t.dashboard.chartPlaybooks}
               color="var(--chart-3)"
             />
             <TimeSeriesChart
               data={data.stats?.evaluations_time_series ?? []}
-              title="Evaluation Success Rate Over Time"
+              title={t.dashboard.chartEvalSuccessRate}
               color="var(--chart-4)"
             />
           </div>

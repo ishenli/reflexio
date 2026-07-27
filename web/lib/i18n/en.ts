@@ -9,11 +9,13 @@ export const en: LocaleDict = {
     agentPlaybooks: "Agent Playbooks",
     userPlaybooks: "User Playbooks",
     search: "Search",
+    searchAnalytics: "Search Analytics",
     settings: "Settings",
     requests: "Requests",
     sessions: "Sessions",
     configure: "Configure",
     editConfig: "Edit Config",
+    collapseSidebar: "Collapse sidebar",
   },
 
   common: {
@@ -32,6 +34,7 @@ export const en: LocaleDict = {
     name: "Name",
     user: "User",
     version: "Version",
+    agent: "Agent",
     tags: "Tags",
     date: "Date",
     actions: "Actions",
@@ -42,6 +45,9 @@ export const en: LocaleDict = {
     archivedItems: "Archived",
     uniqueUsers: "Unique Users",
     clear: "Clear",
+    prev: "Prev",
+    next: "Next",
+    edit: "Edit",
   },
 
   dashboard: {
@@ -64,6 +70,35 @@ export const en: LocaleDict = {
     topSources: "Top Sources",
     profilesByExtractor: "Profiles by Extractor",
     noProfileChanges: "No profile changes recorded",
+    // Overview header
+    dashboardTitle: "Dashboard",
+    dashboardDesc: "Overview of your Reflexio instance metrics",
+    // Stat cards
+    statInteractions: "Interactions",
+    statInteractionsDesc: "Total interactions in period",
+    statUserProfiles: "User Profiles",
+    statUserProfilesDesc: "Active user profiles",
+    statPlaybooks: "Playbooks",
+    statPlaybooksDesc: "Active playbooks",
+    statSuccessRate: "Success Rate",
+    statSuccessRateDesc: "Agent success rate",
+    vsPreviousPeriod: "vs previous period",
+    // Time series charts
+    chartInteractions: "Interactions Over Time",
+    chartProfiles: "Profiles Over Time",
+    chartPlaybooks: "Playbooks Over Time",
+    chartEvalSuccessRate: "Evaluation Success Rate Over Time",
+    // Top applied rules
+    topAppliedRules: "Top Applied Rules",
+    topAppliedRulesDesc: "Most frequently applied playbooks and profiles",
+    noRuleData: "No rule application data available",
+    tooltipApplied: "Applied",
+    tooltipType: "Type",
+    // Time range
+    timeRange7d: "7d",
+    timeRange14d: "14d",
+    timeRange30d: "30d",
+    timeRange90d: "90d",
     // Interactions
     interactionsOverTime: "Interactions Over Time",
     messageRoles: "Message Roles",
@@ -152,6 +187,16 @@ export const en: LocaleDict = {
     operationStatusUnavailable: "Operation status unavailable",
     error: "Error",
     anUnknownErrorOccurred: "An unknown error occurred",
+    editProfileTitle: "Edit Profile Content",
+    editProfileContent: "Content",
+    editContentPlaceholder: "Enter profile content…",
+    saving: "Saving",
+    save: "Save",
+    deleteProfileTitle: "Delete Profile",
+    deleteProfileConfirm: 'Delete profile "{id}"? This action cannot be undone.',
+    deleteProfileWarning: "This will permanently remove this profile and its data.",
+    deleteProfileSuccess: 'Profile "{id}" deleted successfully.',
+    updateProfileSuccess: 'Profile "{id}" updated successfully.',
   },
 
   userPlaybooks: {
@@ -226,6 +271,8 @@ export const en: LocaleDict = {
     sourceLabel: "Source",
     agentLabel: "Agent",
     evalOnly: "Eval Only",
+    lastActivity: "Last Activity",
+    firstMessage: "First Message",
     noData: "No data",
     yes: "Yes",
     no: "No",
@@ -233,6 +280,11 @@ export const en: LocaleDict = {
     deleteSuccess: 'Deleted session "{id}" ({count} requests removed)',
     deleteFail: 'Delete failed: {msg}',
     deleteFailed: "Delete failed",
+    details: "Session Details",
+    filterUser: "User",
+    filterAgent: "Agent",
+    allUsers: "All Users",
+    allAgents: "All Agents",
   },
 
   evaluations: {
@@ -322,6 +374,28 @@ export const en: LocaleDict = {
   topBar: {
     apiDocs: "Reflexio",
     apiReference: "API Reference",
+  },
+
+  searchAnalytics: {
+    title: "Search Analytics",
+    desc: "Track search usage and effectiveness over time",
+    statTotalSearches: "Total Searches",
+    statTotalSearchesDesc: "All search requests in period",
+    statAvgResults: "Avg Results/Search",
+    statAvgResultsDesc: "Average results returned per query",
+    statZeroResultRate: "Zero-Result Rate",
+    statZeroResultRateDesc: "Searches returning no results",
+    statAvgLatency: "Avg Latency",
+    statAvgLatencyDesc: "Average search response time",
+    chartSearchesPerDay: "Searches per Day",
+    chartResultsPerDay: "Avg Results per Day",
+    chartLatencyPerDay: "Avg Latency (ms) per Day",
+    topQueries: "Top Queries",
+    topQueriesDesc: "Most frequent search queries",
+    modeDistribution: "Search Mode Distribution",
+    modeDistributionDesc: "Breakdown by search mode",
+    queryColumn: "Query",
+    countColumn: "Count",
   },
 
   searchPage: {

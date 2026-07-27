@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n/context";
 import type { PlaybookApplicationStat } from "@/lib/types";
 
 interface TopAppliedRulesProps {
@@ -19,6 +20,7 @@ interface TopAppliedRulesProps {
 }
 
 export function TopAppliedRules({ stats, className }: TopAppliedRulesProps) {
+  const { t } = useLocale();
   const chartData = useMemo(() => {
     if (!stats?.length) return [];
     return stats
@@ -35,10 +37,10 @@ export function TopAppliedRules({ stats, className }: TopAppliedRulesProps) {
     return (
       <div className={cn("rounded-xl border border-border bg-card", className)}>
         <div className="px-5 py-3.5 border-b border-border">
-          <h3 className="text-sm font-semibold">Top Applied Rules</h3>
+          <h3 className="text-sm font-semibold">{t.dashboard.topAppliedRules}</h3>
         </div>
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-          No rule application data available
+          {t.dashboard.noRuleData}
         </div>
       </div>
     );
@@ -47,9 +49,9 @@ export function TopAppliedRules({ stats, className }: TopAppliedRulesProps) {
   return (
     <div className={cn("rounded-xl border border-border bg-card", className)}>
       <div className="px-5 py-3.5 border-b border-border">
-        <h3 className="text-sm font-semibold">Top Applied Rules</h3>
+        <h3 className="text-sm font-semibold">{t.dashboard.topAppliedRules}</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Most frequently applied playbooks and profiles
+          {t.dashboard.topAppliedRulesDesc}
         </p>
       </div>
       <div className="p-4">
@@ -87,14 +89,13 @@ export function TopAppliedRules({ stats, className }: TopAppliedRulesProps) {
                   <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm">
                     <p className="font-medium text-foreground">{row.fullTitle}</p>
                     <p className="text-muted-foreground">
-                      Applied{" "}
+                      {t.dashboard.tooltipApplied}{" "}
                       <span className="font-semibold text-foreground">
                         {row.count}
-                      </span>{" "}
-                      time{row.count !== 1 ? "s" : ""}
+                      </span>
                     </p>
                     <p className="text-muted-foreground capitalize">
-                      Type: {row.kind.replace("_", " ")}
+                      {t.dashboard.tooltipType}: {row.kind.replace("_", " ")}
                     </p>
                   </div>
                 );

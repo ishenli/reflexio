@@ -403,6 +403,38 @@ class ExtrasMixin:
         return int(rows[0][0] or 0)
 
     @SQLiteStorageBase.handle_exceptions
+    def get_session_stats(self) -> dict:
+        """Return aggregate session-level statistics via SQL aggregate queries."""
+        with self._lock:
+            # Total sessions — count distinct session_ids (exclude empty/null)
+            session_count = self._fetchone(
+                "SELECT COUNT(DISTINCT session_id) FROM requests "
+                "WHERE session_id IS NOT NULL AND session_id != ''"
+            )
+            total_sessions = int(session_count[0] or 0) if session_count else 0
+
+            # Total requests
+            req_count = self._fetchone("SELECT COUNT(*) FROM requests")
+            total_requests = int(req_count[0] or 0) if req_count else 0
+
+            # Total interactions
+            int_count = self._fetchone("SELECT COUNT(*) FROM interactions")
+            total_interactions = int(int_count[0] or 0) if int_count else 0
+
+            # Unique users
+            user_count = self._fetchone(
+                "SELECT COUNT(DISTINCT user_id) FROM requests"
+            )
+            unique_users = int(user_count[0] or 0) if user_count else 0
+
+        return {
+            "total_sessions": total_sessions,
+            "total_requests": total_requests,
+            "total_interactions": total_interactions,
+            "unique_users": unique_users,
+        }
+
+    @SQLiteStorageBase.handle_exceptions
     def get_interactions_by_session(self, session_id: str) -> list[Interaction]:
         """Return interactions for a session, ordered by created_at.
 
@@ -592,3 +624,192 @@ class ExtrasMixin:
             )
             for row in rows
         ]
+
+    # ------------------------------------------------------------------
+    # Search logging and analytics
+    # ------------------------------------------------------------------
+
+    @SQLiteStorageBase.handle_exceptions
+    def insert_search_log(self, log_entry: dict) -> None:
+        """Insert a search log record (fire-and-forget).
+
+        Uses ``_execute`` which auto-commits outside a ``commit_scope``,
+        making this safe for ``BackgroundTasks`` concurrent writes.
+        """
+        _get = log_entry.get
+        self._execute(
+            """INSERT INTO search_logs
+                 (org_id, query_text, reformulated_query, search_mode,
+                  effective_search_mode, entity_types, total_results,
+                  profile_results, agent_playbook_results,
+                  user_playbook_results, interaction_results,
+                  threshold, top_k, latency_ms,
+                  caller_type, request_id, session_id, user_id,
+                  reformulation_enabled, embedding_failed,
+                  recency_on, floor_on, endpoint)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                _get("org_id", ""),
+                _get("query_text", ""),
+                _get("reformulated_query"),
+                _get("search_mode", "hybrid"),
+                _get("effective_search_mode"),
+                _get("entity_types"),
+                _get("total_results", 0),
+                _get("profile_results", 0),
+                _get("agent_playbook_results", 0),
+                _get("user_playbook_results", 0),
+                _get("interaction_results", 0),
+                _get("threshold"),
+                _get("top_k"),
+                _get("latency_ms"),
+                _get("caller_type"),
+                _get("request_id"),
+                _get("session_id"),
+                _get("user_id"),
+                _get("reformulation_enabled", 0),
+                _get("embedding_failed", 0),
+                _get("recency_on", 0),
+                _get("floor_on", 0),
+                _get("endpoint", ""),
+            ),
+        )
+
+    @SQLiteStorageBase.handle_exceptions
+    def get_search_analytics(self, org_id: str, days_back: int = 30) -> dict:
+        """Return search analytics for the given org and look-back window.
+
+        Buckets results per day, computes aggregate summary stats, ranks
+        top queries, and tabulates search-mode distribution — all in
+        Python, following the ``get_playbook_application_stats`` pattern.
+        """
+        current_time = _epoch_now()
+        seconds_in_period = days_back * 24 * 60 * 60
+        current_start = current_time - seconds_in_period
+        current_start_iso = _epoch_to_iso(current_start)
+        current_time_iso = _epoch_to_iso(current_time)
+
+        rows = self._fetchall(
+            """SELECT created_at, total_results, latency_ms, search_mode, query_text
+               FROM search_logs
+               WHERE org_id = ?
+                 AND created_at >= ?
+                 AND created_at <= ?
+               ORDER BY created_at""",
+            (org_id, current_start_iso, current_time_iso),
+        )
+
+        if not rows:
+            return {
+                "searches_time_series": [],
+                "results_time_series": [],
+                "latency_time_series": [],
+                "summary": {
+                    "total_searches": 0,
+                    "avg_results_per_search": 0.0,
+                    "zero_result_rate": 0.0,
+                    "avg_latency_ms": 0.0,
+                },
+                "top_queries": [],
+                "mode_distribution": [],
+            }
+
+        # --- Daily bucketing ---
+        day_buckets: dict[str, dict] = {}
+        for row in rows:
+            created_iso = row["created_at"]
+            # Extract just the date portion (YYYY-MM-DD)
+            day_key = created_iso[:10] if created_iso else ""
+            if day_key not in day_buckets:
+                day_buckets[day_key] = {
+                    "search_count": 0,
+                    "total_results_sum": 0,
+                    "total_latency_ms": 0,
+                }
+            bucket = day_buckets[day_key]
+            bucket["search_count"] += 1
+            bucket["total_results_sum"] += int(row["total_results"] or 0)
+            if row["latency_ms"] is not None:
+                bucket["total_latency_ms"] += int(row["latency_ms"])
+
+        searches_ts = []
+        results_ts = []
+        latency_ts = []
+        for day_key in sorted(day_buckets):
+            b = day_buckets[day_key]
+            try:
+                ts = int(datetime.strptime(day_key, "%Y-%m-%d").replace(
+                    tzinfo=UTC).timestamp())
+            except (ValueError, OSError):
+                continue
+            n = b["search_count"]
+            searches_ts.append({"timestamp": ts, "value": float(n)})
+            if n > 0:
+                results_ts.append({
+                    "timestamp": ts,
+                    "value": float(b["total_results_sum"]) / n,
+                })
+                latency_ts.append({
+                    "timestamp": ts,
+                    "value": float(b["total_latency_ms"]) / n,
+                })
+
+        # --- Summary stats ---
+        total_searches = len(rows)
+        zero_result_count = sum(1 for r in rows if int(r["total_results"] or 0) == 0)
+        total_results_sum = sum(int(r["total_results"] or 0) for r in rows)
+        total_latency_sum = sum(
+            int(r["latency_ms"]) for r in rows if r["latency_ms"] is not None
+        )
+        latency_count = sum(1 for r in rows if r["latency_ms"] is not None)
+
+        summary = {
+            "total_searches": total_searches,
+            "avg_results_per_search": (
+                round(total_results_sum / total_searches, 2)
+                if total_searches > 0
+                else 0.0
+            ),
+            "zero_result_rate": (
+                round(zero_result_count / total_searches * 100, 2)
+                if total_searches > 0
+                else 0.0
+            ),
+            "avg_latency_ms": (
+                round(total_latency_sum / latency_count, 2)
+                if latency_count > 0
+                else 0.0
+            ),
+        }
+
+        # --- Top queries ---
+        query_counter: dict[str, int] = {}
+        for row in rows:
+            q = (row["query_text"] or "").strip()
+            if q:
+                query_counter[q] = query_counter.get(q, 0) + 1
+        sorted_queries = sorted(
+            query_counter.items(), key=lambda kv: -kv[1]
+        )[:20]
+        top_queries = [
+            {"query": q, "count": c} for q, c in sorted_queries
+        ]
+
+        # --- Mode distribution ---
+        mode_counter: dict[str, int] = {}
+        for row in rows:
+            mode = (row["search_mode"] or "unknown").lower()
+            mode_counter[mode] = mode_counter.get(mode, 0) + 1
+        mode_distribution = [
+            {"mode": m, "count": c}
+            for m, c in sorted(mode_counter.items(), key=lambda kv: -kv[1])
+        ]
+
+        return {
+            "searches_time_series": searches_ts,
+            "results_time_series": results_ts,
+            "latency_time_series": latency_ts,
+            "summary": summary,
+            "top_queries": top_queries,
+            "mode_distribution": mode_distribution,
+        }

@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Layers,
+  Trash2,
 } from "lucide-react";
 import {
   BarChart,
@@ -36,7 +37,7 @@ import {
 } from "recharts";
 import Link from "next/link";
 import { useSettings } from "@/hooks/use-settings";
-import { useLocale } from "@/lib/i18n/context";
+import { useLocale, fmt } from "@/lib/i18n/context";
 import { useProfilesData } from "./use-profiles-data";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,8 @@ import {
   triggerManualProfileGeneration,
   upgradeAllProfiles,
   downgradeAllProfiles,
+  updateProfile,
+  deleteProfile,
 } from "@/lib/profiles-api";
 import type { ProfileGenerationOperationStatus } from "@/lib/profiles-api";
 import type { LocaleDict } from "@/lib/i18n/locales";
@@ -511,6 +514,8 @@ export default function ProfilesDashboard() {
       <ProfileDetailDialog
         profile={selectedProfile}
         onClose={() => setSelectedProfile(null)}
+        apiEndpoint={apiEndpoint}
+        onRefresh={refresh}
       />
 
       {/* Manual Generate Dialog */}
@@ -1058,191 +1063,392 @@ function statusTone(status: string | undefined): "muted" | "running" | "success"
 function ProfileDetailDialog({
   profile,
   onClose,
+  apiEndpoint,
+  onRefresh,
 }: {
   profile: ProfileView | null;
   onClose: () => void;
+  apiEndpoint: string;
+  onRefresh: () => void;
 }) {
   const { t } = useLocale();
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Reset state when profile changes
+  useEffect(() => {
+    setEditing(false);
+    setResult(null);
+    setShowDeleteConfirm(false);
+    setEditContent(profile?.content || "");
+  }, [profile]);
+
+  // Also sync content when entering edit mode — in case of stale state
+  const handleStartEdit = useCallback(() => {
+    setEditContent(profile?.content || "");
+    setEditing(true);
+    setResult(null);
+  }, [profile]);
+
+  const handleSave = useCallback(async () => {
+    if (!profile) return;
+    setSaving(true);
+    setResult(null);
+    try {
+      const res = await updateProfile(apiEndpoint, {
+        user_id: profile.user_id,
+        profile_id: profile.profile_id,
+        content: editContent,
+      });
+      if (res.success) {
+        setResult({ success: true, message: fmt(t.dashboard.updateProfileSuccess, { id: profile.profile_id }) });
+        setEditing(false);
+        onRefresh();
+      } else {
+        setResult({ success: false, message: res.msg || "Update failed" });
+      }
+    } catch (err) {
+      setResult({
+        success: false,
+        message: err instanceof Error ? err.message : "Update failed",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [profile, apiEndpoint, editContent, onRefresh, t.dashboard.updateProfileSuccess]);
+
+  const handleDelete = useCallback(async () => {
+    if (!profile) return;
+    setDeleting(true);
+    setResult(null);
+    try {
+      const res = await deleteProfile(apiEndpoint, {
+        user_id: profile.user_id,
+        profile_id: profile.profile_id,
+      });
+      if (res.success) {
+        setResult({ success: true, message: fmt(t.dashboard.deleteProfileSuccess, { id: profile.profile_id }) });
+        setShowDeleteConfirm(false);
+        setEditing(false);
+        setTimeout(() => {
+          onClose();
+          onRefresh();
+        }, 800);
+      } else {
+        setResult({ success: false, message: res.msg || "Delete failed" });
+        setShowDeleteConfirm(false);
+      }
+    } catch (err) {
+      setResult({
+        success: false,
+        message: err instanceof Error ? err.message : "Delete failed",
+      });
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
+  }, [profile, apiEndpoint, onClose, onRefresh, t.dashboard]);
+
   if (!profile) return null;
 
   const open = !!profile;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="text-base">{t.dashboard.profileDetails}</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-base">{t.dashboard.profileDetails}</DialogTitle>
+          </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(90vh-120px)]">
-          <div className="space-y-6 pr-4">
-            {/* Header Info */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
-                  {profile.profile_id}
-                </code>
-                <StatusBadge status={profile.status} />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                User: <span className="font-mono">{profile.user_id}</span>
-              </p>
+          {/* Action buttons */}
+          <div className="flex items-center justify-end gap-2 px-0 pt-0">
+            {!editing && (
+              <>
+                <Button size="sm" variant="outline" onClick={handleStartEdit}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 mr-1"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  {t.common.edit}
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => { setShowDeleteConfirm(true); setResult(null); }}>
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  {t.common.delete}
+                </Button>
+              </>
+            )}
+          </div>
+
+          {/* Result banner */}
+          {result && (
+            <div
+              className={cn(
+                "rounded-lg border px-4 py-3 text-sm",
+                result.success
+                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200"
+                  : "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 text-red-800 dark:text-red-200"
+              )}
+            >
+              {result.message}
+              <button onClick={() => setResult(null)} className="ml-2 text-xs underline">
+                {t.sessions.dismiss}
+              </button>
             </div>
+          )}
 
-            <Tabs defaultValue="content">
-              <TabsList className="w-full">
-                <TabsTrigger value="content" className="flex-1">{t.userPlaybooks.content}</TabsTrigger>
-                <TabsTrigger value="lineage" className="flex-1">{t.dashboard.lineage}</TabsTrigger>
-                <TabsTrigger value="metadata" className="flex-1">{t.dashboard.metadata}</TabsTrigger>
-              </TabsList>
-
-              {/* Content Tab */}
-              <TabsContent value="content" className="mt-4">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="text-sm whitespace-pre-wrap">{profile.content}</p>
+          <ScrollArea className="max-h-[calc(90vh-180px)]">
+            <div className="space-y-6 pr-4">
+              {/* Header Info */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+                    {profile.profile_id}
+                  </code>
+                  <StatusBadge status={profile.status} />
                 </div>
-              </TabsContent>
+                <p className="text-xs text-muted-foreground">
+                  User: <span className="font-mono">{profile.user_id}</span>
+                </p>
+              </div>
 
-              {/* Lineage Tab */}
-              <TabsContent value="lineage" className="mt-4 space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                      <History className="size-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{t.dashboard.generatedFromRequest}</p>
-                      <code className="text-xs font-mono text-muted-foreground">
-                        {profile.generated_from_request_id}
-                      </code>
-                    </div>
-                  </div>
+              <Tabs defaultValue={editing ? "content" : "content"}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="content" className="flex-1">{t.userPlaybooks.content}</TabsTrigger>
+                  <TabsTrigger value="lineage" className="flex-1">{t.dashboard.lineage}</TabsTrigger>
+                  <TabsTrigger value="metadata" className="flex-1">{t.dashboard.metadata}</TabsTrigger>
+                </TabsList>
 
-                  {profile.source_span && (
-                    <div className="flex items-start gap-3">
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                        <Eye className="size-4 text-blue-600" />
+                {/* Content Tab */}
+                <TabsContent value="content" className="mt-4">
+                  {editing ? (
+                    <div className="space-y-3">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {t.dashboard.editProfileContent}
+                      </label>
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="w-full min-h-[200px] rounded-lg border border-border bg-card p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        placeholder={t.dashboard.editContentPlaceholder}
+                        disabled={saving}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { setEditing(false); setEditContent(profile.content || ""); }}
+                          disabled={saving}
+                        >
+                          {t.common.cancel}
+                        </Button>
+                        <Button size="sm" onClick={handleSave} disabled={saving}>
+                          {saving ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          ) : null}
+                          {saving ? t.dashboard.saving : t.dashboard.save}
+                        </Button>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{t.dashboard.sourceSpan}</p>
-                        <p className="text-xs text-muted-foreground">{profile.source_span}</p>
-                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-border bg-muted/30 p-4">
+                      <p className="text-sm whitespace-pre-wrap">{profile.content}</p>
                     </div>
                   )}
+                </TabsContent>
 
-                  {profile.source_interaction_ids && profile.source_interaction_ids.length > 0 && (
+                {/* Lineage Tab */}
+                <TabsContent value="lineage" className="mt-4 space-y-4">
+                  <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-                        <ArrowRight className="size-4 text-emerald-600" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <History className="size-4 text-primary" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{t.dashboard.sourceInteractions}</p>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {profile.source_interaction_ids.map((id) => (
-                            <Link
-                              key={id}
-                              href={`/dashboard/interactions?highlight=${id}`}
-                              onClick={onClose}
-                            >
-                              <Badge variant="outline" className="cursor-pointer hover:bg-accent">
-                                #{id}
-                              </Badge>
-                            </Link>
+                        <p className="text-sm font-medium">{t.dashboard.generatedFromRequest}</p>
+                        <code className="text-xs font-mono text-muted-foreground">
+                          {profile.generated_from_request_id}
+                        </code>
+                      </div>
+                    </div>
+
+                    {profile.source_span && (
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                          <Eye className="size-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{t.dashboard.sourceSpan}</p>
+                          <p className="text-xs text-muted-foreground">{profile.source_span}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {profile.source_interaction_ids && profile.source_interaction_ids.length > 0 && (
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                          <ArrowRight className="size-4 text-emerald-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{t.dashboard.sourceInteractions}</p>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {profile.source_interaction_ids.map((id) => (
+                              <Link
+                                key={id}
+                                href={`/dashboard/interactions?highlight=${id}`}
+                                onClick={onClose}
+                              >
+                                <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+                                  #{id}
+                                </Badge>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {profile.source && (
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-purple-500/10">
+                          <Tag className="size-4 text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{t.userPlaybooks.source}</p>
+                          <p className="text-xs text-muted-foreground">{profile.source}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Metadata Tab */}
+                <TabsContent value="metadata" className="mt-4 space-y-4">
+                  <div className="grid gap-3 text-sm">
+                    <div className="flex justify-between py-2 border-b border-border">
+                      <span className="text-muted-foreground">Profile ID</span>
+                      <code className="font-mono text-xs">{profile.profile_id}</code>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-border">
+                      <span className="text-muted-foreground">User ID</span>
+                      <code className="font-mono text-xs">{profile.user_id}</code>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-border">
+                      <span className="text-muted-foreground">{t.dashboard.statusLabel}</span>
+                      <span className="capitalize">{profile.status || "current"}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-border">
+                      <span className="text-muted-foreground">{t.dashboard.lastModified}</span>
+                      <span>
+                        {profile.last_modified_timestamp > 0
+                          ? new Date(profile.last_modified_timestamp * 1000).toLocaleString()
+                          : t.common.unknown}
+                      </span>
+                    </div>
+                    {profile.expiration_timestamp > 0 && (
+                      <div className="flex justify-between py-2 border-b border-border">
+                        <span className="text-muted-foreground">{t.dashboard.expiration}</span>
+                        <span>
+                          {new Date(profile.expiration_timestamp * 1000).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    {profile.profile_time_to_live && (
+                      <div className="flex justify-between py-2 border-b border-border">
+                        <span className="text-muted-foreground">{t.dashboard.ttl}</span>
+                        <span>{profile.profile_time_to_live}</span>
+                      </div>
+                    )}
+                    {profile.extractor_names && profile.extractor_names.length > 0 && (
+                      <div className="flex justify-between py-2 border-b border-border">
+                        <span className="text-muted-foreground">{t.dashboard.extractors}</span>
+                        <div className="flex gap-1">
+                          {profile.extractor_names.map((name) => (
+                            <Badge key={name} variant="secondary" className="text-xs">
+                              {name}
+                            </Badge>
                           ))}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    {profile.tags && profile.tags.length > 0 && (
+                      <div className="flex justify-between py-2 border-b border-border">
+                        <span className="text-muted-foreground">{t.common.tags}</span>
+                        <div className="flex gap-1">
+                          {profile.tags.map((tag) => (
+                            <Badge key={tag} variant="outline" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                  {profile.source && (
-                    <div className="flex items-start gap-3">
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-purple-500/10">
-                        <Tag className="size-4 text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{t.userPlaybooks.source}</p>
-                        <p className="text-xs text-muted-foreground">{profile.source}</p>
-                      </div>
+                  {profile.custom_features && Object.keys(profile.custom_features).length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium mb-2">{t.dashboard.customFeatures}</p>
+                      <JsonView json={JSON.stringify(profile.custom_features, null, 2)} />
                     </div>
                   )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={(v) => !v && setShowDeleteConfirm(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Trash2 className="h-4 w-4 text-red-500" />
+              {t.dashboard.deleteProfileTitle}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm">
+              {fmt(t.dashboard.deleteProfileConfirm, { id: profile.profile_id })}
+            </p>
+            <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-red-500/20 mt-0.5">
+                  <span className="text-xs font-bold text-red-600 dark:text-red-400">!</span>
                 </div>
-              </TabsContent>
-
-              {/* Metadata Tab */}
-              <TabsContent value="metadata" className="mt-4 space-y-4">
-                <div className="grid gap-3 text-sm">
-                  <div className="flex justify-between py-2 border-b border-border">
-                    <span className="text-muted-foreground">Profile ID</span>
-                    <code className="font-mono text-xs">{profile.profile_id}</code>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-border">
-                    <span className="text-muted-foreground">User ID</span>
-                    <code className="font-mono text-xs">{profile.user_id}</code>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-border">
-                    <span className="text-muted-foreground">{t.dashboard.statusLabel}</span>
-                    <span className="capitalize">{profile.status || "current"}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-border">
-                    <span className="text-muted-foreground">{t.dashboard.lastModified}</span>
-                    <span>
-                      {profile.last_modified_timestamp > 0
-                        ? new Date(profile.last_modified_timestamp * 1000).toLocaleString()
-                        : t.common.unknown}
-                    </span>
-                  </div>
-                  {profile.expiration_timestamp > 0 && (
-                    <div className="flex justify-between py-2 border-b border-border">
-                      <span className="text-muted-foreground">{t.dashboard.expiration}</span>
-                      <span>
-                        {new Date(profile.expiration_timestamp * 1000).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  {profile.profile_time_to_live && (
-                    <div className="flex justify-between py-2 border-b border-border">
-                      <span className="text-muted-foreground">{t.dashboard.ttl}</span>
-                      <span>{profile.profile_time_to_live}</span>
-                    </div>
-                  )}
-                  {profile.extractor_names && profile.extractor_names.length > 0 && (
-                    <div className="flex justify-between py-2 border-b border-border">
-                      <span className="text-muted-foreground">{t.dashboard.extractors}</span>
-                      <div className="flex gap-1">
-                        {profile.extractor_names.map((name) => (
-                          <Badge key={name} variant="secondary" className="text-xs">
-                            {name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {profile.tags && profile.tags.length > 0 && (
-                    <div className="flex justify-between py-2 border-b border-border">
-                      <span className="text-muted-foreground">{t.common.tags}</span>
-                      <div className="flex gap-1">
-                        {profile.tags.map((tag) => (
-                          <Badge key={tag} variant="outline" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {profile.custom_features && Object.keys(profile.custom_features).length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium mb-2">{t.dashboard.customFeatures}</p>
-                    <JsonView json={JSON.stringify(profile.custom_features, null, 2)} />
-                  </div>
+                <p className="text-xs text-red-700 dark:text-red-400">
+                  {t.dashboard.deleteProfileWarning}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+              >
+                {t.common.cancel}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
                 )}
-              </TabsContent>
-            </Tabs>
+                {t.common.delete}
+              </Button>
+            </div>
           </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

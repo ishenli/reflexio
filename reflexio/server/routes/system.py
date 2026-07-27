@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse
 from reflexio.models.api_schema.retriever_schema import (
     GetDashboardStatsRequest,
     GetDashboardStatsResponse,
+    GetSearchAnalyticsRequest,
+    GetSearchAnalyticsResponse,
     StorageStatsRequest,
     StorageStatsResponse,
 )
@@ -227,6 +229,30 @@ def get_dashboard_stats(
 
     # Get dashboard stats using Reflexio's method
     return reflexio.get_dashboard_stats(payload)
+
+
+@router.post(
+    "/api/get_search_analytics",
+    response_model=GetSearchAnalyticsResponse,
+    response_model_exclude_none=True,
+)
+@limiter.limit("30/minute")
+def get_search_analytics(
+    request: Request,
+    payload: GetSearchAnalyticsRequest,
+    org_id: str = Depends(default_get_org_id),
+) -> GetSearchAnalyticsResponse:
+    """Get search analytics: time-series, summary, top queries, mode distribution.
+
+    Args:
+        request (GetSearchAnalyticsRequest): Request containing days_back.
+        org_id (str): Organization ID.
+
+    Returns:
+        GetSearchAnalyticsResponse: Response containing search analytics data.
+    """
+    reflexio = reflexio_cache.get_reflexio(org_id=org_id)
+    return reflexio.get_search_analytics(payload)
 
 
 @router.get(

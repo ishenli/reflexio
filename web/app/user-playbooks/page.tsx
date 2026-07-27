@@ -36,6 +36,7 @@ import {
 import {
   upgradeUserPlaybooks,
   downgradeUserPlaybooks,
+  updateUserPlaybookStatus,
 } from "@/lib/user-playbooks-api";
 import type { UserPlaybookView } from "@/lib/types";
 
@@ -122,13 +123,16 @@ export default function UserPlaybooksPage() {
 
   // Stats
   const stats = useMemo(() => {
+    console.log('[DEBUG] data.playbooks:', data.playbooks.map(p => ({id: p.user_playbook_id, status: p.status})));
     const total = data.playbooks.length;
+    // Current 状态在数据库中 status 为 null，不是字符串 "current"
     const current = data.playbooks.filter(
-      (p) => p.status === "current" || p.status === null
+      (p) => !p.status || p.status === "current"
     ).length;
     const pending = data.playbooks.filter((p) => p.status === "pending").length;
     const archived = data.playbooks.filter((p) => p.status === "archived")
       .length;
+    console.log('[DEBUG] stats:', {total, current, pending, archived});
     const uniqueUsers = new Set(data.playbooks.map((p) => p.user_id)).size;
     return { total, current, pending, archived, uniqueUsers };
   }, [data.playbooks]);
@@ -458,6 +462,9 @@ export default function UserPlaybooksPage() {
         <UserPlaybooksTable
           playbooks={filteredPlaybooks}
           onDelete={removePlaybook}
+          onPromote={(id) => updateUserPlaybookStatus(apiEndpoint, id, "promote")}
+          onArchive={(id) => updateUserPlaybookStatus(apiEndpoint, id, "archive")}
+          onActionSuccess={refresh}
         />
       </div>
 
@@ -769,13 +776,20 @@ export default function UserPlaybooksPage() {
 function UserPlaybooksTable({
   playbooks,
   onDelete,
+  onPromote,
+  onArchive,
+  onActionSuccess,
 }: {
   playbooks: UserPlaybookView[];
   onDelete: (id: number) => Promise<{ success: boolean; msg?: string }>;
+  onPromote: (id: number) => Promise<{ success: boolean; msg?: string }>;
+  onArchive: (id: number) => Promise<{ success: boolean; msg?: string }>;
+  onActionSuccess?: () => void;
 }) {
   const { t } = useLocale();
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
   if (!playbooks.length) {
     return (
@@ -801,13 +815,13 @@ function UserPlaybooksTable({
               {t.common.status}
             </th>
             <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap border-b border-border">
-              {t.common.name}
+              {t.userPlaybooks.source}
             </th>
             <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap border-b border-border">
               {t.common.user}
             </th>
             <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap border-b border-border">
-              {t.common.version}
+              {t.common.agent}
             </th>
             <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap border-b border-border">
               {t.common.tags}
@@ -842,7 +856,20 @@ function UserPlaybooksTable({
                   await onDelete(playbook.user_playbook_id);
                   setDeletingId(null);
                 }}
+                onPromote={async () => {
+                  setActionLoadingId(playbook.user_playbook_id);
+                  const result = await onPromote(playbook.user_playbook_id);
+                  setActionLoadingId(null);
+                  if (result.success && onActionSuccess) onActionSuccess();
+                }}
+                onArchive={async () => {
+                  setActionLoadingId(playbook.user_playbook_id);
+                  const result = await onArchive(playbook.user_playbook_id);
+                  setActionLoadingId(null);
+                  if (result.success && onActionSuccess) onActionSuccess();
+                }}
                 deletingId={deletingId}
+                actionLoadingId={actionLoadingId}
               />
             );
           })}
@@ -859,7 +886,10 @@ function FragmentRow({
   expanded,
   onToggle,
   onDelete,
+  onPromote,
+  onArchive,
   deletingId,
+  actionLoadingId,
 }: {
   playbook: UserPlaybookView;
   status: string;
@@ -867,10 +897,14 @@ function FragmentRow({
   expanded: boolean;
   onToggle: () => void;
   onDelete: () => Promise<void>;
+  onPromote: () => Promise<void>;
+  onArchive: () => Promise<void>;
   deletingId: number | null;
+  actionLoadingId: number | null;
 }) {
   const { t } = useLocale();
   const isDeleting = deletingId === playbook.user_playbook_id;
+  const isLoading = actionLoadingId === playbook.user_playbook_id;
 
   return (
     <>
@@ -899,8 +933,8 @@ function FragmentRow({
             {status}
           </span>
         </td>
-        <td className="px-3 py-1.5 font-medium">
-          {playbook.playbook_name || "—"}
+        <td className="px-3 py-1.5 font-medium font-mono text-muted-foreground max-w-[160px] truncate" title={playbook.source || ""}>
+          {playbook.source || "—"}
         </td>
         <td className="px-3 py-1.5 font-mono text-muted-foreground max-w-[100px] truncate">
           {playbook.user_id || "—"}
@@ -936,21 +970,61 @@ function FragmentRow({
             : "—"}
         </td>
         <td className="px-3 py-1.5">
-          <button
-            title={t.common.delete}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirm(t.common.delete + "?")) onDelete();
-            }}
-            disabled={isDeleting}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-red-600 disabled:opacity-50"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" />
+          <div className="flex items-center gap-1">
+            {/* Promote/Restore button: show for PENDING or ARCHIVED status */}
+            {(status === "pending" || status === "archived") && (
+              <button
+                title={status === "pending" ? t.userPlaybooks.upgrade : "Restore"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const msg = status === "pending" ? t.userPlaybooks.upgrade + "?" : "Restore to current?";
+                  if (confirm(msg)) onPromote();
+                }}
+                disabled={isLoading}
+                className="rounded p-1 text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-3.5 w-3.5" />
+                )}
+              </button>
             )}
-          </button>
+            {/* Archive button: show for CURRENT status */}
+            {(status === "current" || status === null) && (
+              <button
+                title={t.userPlaybooks.downgrade}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(t.userPlaybooks.downgrade + "?")) onArchive();
+                }}
+                disabled={isLoading}
+                className="rounded p-1 text-amber-600 hover:bg-amber-500/10 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Archive className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+            {/* Delete button */}
+            <button
+              title={t.common.delete}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(t.common.delete + "?")) onDelete();
+              }}
+              disabled={isDeleting}
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-red-600 disabled:opacity-50"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         </td>
       </tr>
       {expanded && (

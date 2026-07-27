@@ -50,6 +50,8 @@ from reflexio.models.api_schema.service_schemas import (
     RunPlaybookAggregationResponse,
     UpgradeUserPlaybooksRequest,
     UpgradeUserPlaybooksResponse,
+    UpdateUserPlaybookStatusRequest,
+    UpdateUserPlaybookStatusResponse,
 )
 from reflexio.models.api_schema.ui.converters import (
     to_agent_playbook_view,
@@ -576,3 +578,62 @@ def downgrade_all_user_playbooks_endpoint(
 
     # Call downgrade_all_user_playbooks with request
     return reflexio.downgrade_all_user_playbooks(request=request)
+
+
+@router.post(
+    "/api/update_user_playbook_status",
+    response_model=UpdateUserPlaybookStatusResponse,
+    response_model_exclude_none=True,
+)
+def update_user_playbook_status_endpoint(
+    request: UpdateUserPlaybookStatusRequest,
+    org_id: str = Depends(default_get_org_id),
+) -> UpdateUserPlaybookStatusResponse:
+    """Update a single user playbook's status (promote or archive).
+
+    Args:
+        request: The update request with playbook ID and action
+        org_id: Organization ID
+
+    Returns:
+        UpdateUserPlaybookStatusResponse: Response containing success status and message
+    """
+    try:
+        storage = reflexio_cache.get_reflexio(org_id=org_id).get_storage()
+    except Exception as e:
+        logger.error("Failed to get storage: %s", e)
+        return UpdateUserPlaybookStatusResponse(
+            success=False, msg=str(e)
+        )
+
+    try:
+        from reflexio.models.api_schema.domain import Status
+
+        if request.action == "promote":
+            # PENDING -> CURRENT
+            success = storage.update_user_playbook_status(
+                user_playbook_id=request.user_playbook_id,
+                new_status=None,  # None = CURRENT
+            )
+        else:  # archive
+            # CURRENT -> ARCHIVED
+            success = storage.update_user_playbook_status(
+                user_playbook_id=request.user_playbook_id,
+                new_status=Status.ARCHIVED,
+            )
+
+        if success:
+            return UpdateUserPlaybookStatusResponse(
+                success=True,
+                message=f"User playbook {request.user_playbook_id} {request.action}d successfully",
+            )
+        else:
+            return UpdateUserPlaybookStatusResponse(
+                success=False,
+                message=f"User playbook {request.user_playbook_id} not found or already in target state",
+            )
+    except Exception as e:
+        logger.error("Failed to update user playbook status: %s", e)
+        return UpdateUserPlaybookStatusResponse(
+            success=False, msg=str(e)
+        )

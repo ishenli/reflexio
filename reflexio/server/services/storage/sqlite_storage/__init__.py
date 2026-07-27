@@ -88,6 +88,7 @@ __all__ = [
     "_cosine_similarity",
     "_effective_search_mode",
     "_sanitize_fts_query",
+    "_is_pure_chinese_query",
     "_true_rrf_merge",
     "_vector_rank_rows",
     "parse_status",

@@ -115,6 +115,8 @@ __all__ = [
     "UpgradeUserPlaybooksResponse",
     "DowngradeUserPlaybooksRequest",
     "DowngradeUserPlaybooksResponse",
+    "UpdateUserPlaybookStatusRequest",
+    "UpdateUserPlaybookStatusResponse",
     "OperationStatusInfo",
     "GetOperationStatusRequest",
     "GetOperationStatusResponse",
@@ -1224,6 +1226,22 @@ class DowngradeUserPlaybooksResponse(BaseModel):
     success: bool
     user_playbooks_demoted: int = 0
     user_playbooks_restored: int = 0
+    message: str = ""
+
+
+class UpdateUserPlaybookStatusRequest(BaseModel):
+    """Request to update a single user playbook's status."""
+
+    user_playbook_id: int
+    action: Literal["promote", "archive"] = Field(
+        description="Action to perform: promote (PENDING→CURRENT) or archive (CURRENT→ARCHIVED)"
+    )
+
+
+class UpdateUserPlaybookStatusResponse(BaseModel):
+    """Response from a single user playbook status update."""
+
+    success: bool
     message: str = ""
 
 

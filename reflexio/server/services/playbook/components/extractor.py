@@ -17,6 +17,7 @@ from reflexio.server.services.extraction.resumable_agent import (
     run_resumable_extraction_agent,
 )
 from reflexio.server.services.extractor_config_utils import get_extractor_name
+from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.extractor_interaction_utils import (
     get_effective_source_filter,
     get_extractor_window_params,
@@ -281,6 +282,10 @@ class PlaybookExtractor:
             if self.config.extraction_definition_prompt
             else ""
         )
+        # Append language instruction to playbook definition
+        lang_instruction = content_language_instruction(self.config.language)
+        if lang_instruction:
+            playbook_definition += lang_instruction
         prompt_manager = self.request_context.prompt_manager
 
         if has_expert_content(all_interactions):

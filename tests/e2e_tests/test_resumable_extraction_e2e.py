@@ -392,7 +392,7 @@ def test_resumable_extraction_resumes_after_human_answer(
             ) as mock_consolidator_cls,
         ):
             mock_consolidator_cls.return_value.deduplicate.side_effect = (
-                lambda profiles, _user_id, _request_id: (profiles, [], [])
+                lambda profiles, _user_id, _request_id, **kwargs: (profiles, [], [])
             )
             resumed = worker.drain(max_runs=1)
 

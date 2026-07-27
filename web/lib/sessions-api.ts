@@ -8,11 +8,19 @@ export interface GetSessionsResponse {
   msg?: string;
 }
 
+export interface SessionStats {
+  total_sessions: number;
+  total_requests: number;
+  total_interactions: number;
+  unique_users: number;
+}
+
 export interface SessionsData {
   sessions: SessionView[];
   hasMore: boolean;
   loading: boolean;
   error: string | null;
+  stats: SessionStats;
 }
 
 export async function fetchSessions(
@@ -82,12 +90,16 @@ export async function fetchAllSessionsData(
   topK: number = 50
 ): Promise<SessionsData> {
   try {
-    const response = await fetchSessions(apiEndpoint, { top_k: topK });
+    const [sessionsResponse, statsResponse] = await Promise.all([
+      fetchSessions(apiEndpoint, { top_k: topK }),
+      fetchSessionStats(apiEndpoint),
+    ]);
     return {
-      sessions: response.sessions,
-      hasMore: response.has_more,
+      sessions: sessionsResponse.sessions,
+      hasMore: sessionsResponse.has_more,
       loading: false,
       error: null,
+      stats: statsResponse,
     };
   } catch (err) {
     return {
@@ -95,6 +107,22 @@ export async function fetchAllSessionsData(
       hasMore: false,
       loading: false,
       error: err instanceof Error ? err.message : "An unknown error occurred",
+      stats: { total_sessions: 0, total_requests: 0, total_interactions: 0, unique_users: 0 },
     };
   }
+}
+
+export async function fetchSessionStats(
+  apiEndpoint: string,
+): Promise<SessionStats> {
+  const url = `${apiEndpoint.replace(/\/$/, "")}/api/get_session_stats`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch session stats (HTTP ${res.status})`);
+  }
+  const json = await res.json();
+  if (!json.success) {
+    throw new Error(json.msg || "Request failed");
+  }
+  return json as SessionStats;
 }

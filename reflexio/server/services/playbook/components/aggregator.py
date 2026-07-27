@@ -23,6 +23,7 @@ from reflexio.models.config_schema import (
 from reflexio.server.api_endpoints.request_context import RequestContext
 from reflexio.server.llm.litellm_client import LiteLLMClient
 from reflexio.server.services.operation_state_utils import OperationStateManager
+from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.playbook.aggregation_prompt_processing import (
     AggregationPromptProcessingContext,
     AggregationPromptProcessor,
@@ -1087,6 +1088,14 @@ class PlaybookAggregator:
                 ),
             }
         ]
+
+        # Append language instruction to aggregation prompt
+        root_config = self.configurator.get_config()
+        playbook_config = getattr(root_config, "user_playbook_extractor_config", None)
+        if playbook_config:
+            lang_instruction = content_language_instruction(playbook_config.language)
+            if lang_instruction:
+                messages[0]["content"] += lang_instruction
 
         try:
             response = self.client.generate_chat_response(

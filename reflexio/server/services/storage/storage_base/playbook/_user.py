@@ -367,6 +367,25 @@ class UserPlaybookStoreMixin:
         raise NotImplementedError
 
     @abstractmethod
+    def update_user_playbook_status(
+        self,
+        user_playbook_id: int,
+        new_status: Status | None,
+        request_id: str | None = None,
+    ) -> bool:
+        """Update a single user playbook's status.
+
+        Args:
+            user_playbook_id: The playbook ID to update
+            new_status: The new status (None = CURRENT)
+            request_id: Optional request ID for lineage tracking
+
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def search_user_playbooks(
         self,
         request: SearchUserPlaybookRequest,

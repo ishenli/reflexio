@@ -190,6 +190,28 @@ export async function downgradeUserPlaybooks(
   return res.json();
 }
 
+// ─── Single User Playbook Status Update ─────────────────────────
+
+export type UserPlaybookStatusAction = "promote" | "archive";
+
+export async function updateUserPlaybookStatus(
+  apiEndpoint: string,
+  userPlaybookId: number,
+  action: UserPlaybookStatusAction
+): Promise<{ success: boolean; msg?: string }> {
+  const url = `${apiEndpoint.replace(/\/$/, "")}/api/update_user_playbook_status`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_playbook_id: userPlaybookId,
+      action: action,
+    }),
+  });
+  if (!res.ok) throw new Error(`Failed to update user playbook status (HTTP ${res.status})`);
+  return res.json();
+}
+
 // ─── Get Playbook Aggregation Change Logs ───────────────────────
 
 export interface PlaybookAggregationChangeLogResponse {

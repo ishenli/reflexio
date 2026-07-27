@@ -1,10 +1,13 @@
 """User playbook CRUD + search methods for SQLite storage."""
 
 import json
+import logging
 import sqlite3
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from reflexio.models.api_schema.common import BlockingIssue
 from reflexio.models.api_schema.retriever_schema import SearchUserPlaybookRequest
@@ -908,3 +911,64 @@ class UserPlaybookStoreMixin:
             if self._own_transaction():
                 self.conn.commit()
         return updated
+
+    @SQLiteStorageBase.handle_exceptions
+    def update_user_playbook_status(
+        self,
+        user_playbook_id: int,
+        new_status: Status | None,
+        request_id: str | None = None,
+    ) -> bool:
+        """Update a single user playbook's status.
+
+        Args:
+            user_playbook_id: The playbook ID to update
+            new_status: The new status (None = CURRENT)
+            request_id: Optional request ID for lineage tracking
+
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        now_ts = _epoch_now()
+        new_val = new_status.value if new_status else None
+        new_val_str = new_status.value if new_status else "None"
+
+        with self._lock:
+            # Get current status first
+            row = self.conn.execute(
+                "SELECT status, user_id, governance_subject_ref FROM user_playbooks WHERE user_playbook_id = ?",
+                (user_playbook_id,),
+            ).fetchone()
+            if row is None:
+                return False
+
+            old_status = row["status"]
+
+            # Check lock/permission
+            if self._assert_user_playbook_writable_locked(user_playbook_id) is None:
+                return False
+
+            cur = self.conn.execute(
+                "UPDATE user_playbooks SET status = ?, retired_at = ? WHERE user_playbook_id = ?",
+                (new_val, now_ts if new_val else None, user_playbook_id),
+            )
+            if cur.rowcount > 0:
+                _append_event_stmt(
+                    self.conn,
+                    org_id=self.org_id,
+                    entity_type="user_playbook",
+                    entity_id=str(user_playbook_id),
+                    op="status_change",
+                    prov="wasInvalidatedBy",
+                    source_ids=[],
+                    actor="api",
+                    request_id=request_id or uuid.uuid4().hex,
+                    reason=f"manual_{new_val_str}",
+                    from_status=old_status,
+                    to_status=new_val,
+                    status_namespace="lifecycle_status",
+                )
+                if self._own_transaction():
+                    self.conn.commit()
+                return True
+            return False

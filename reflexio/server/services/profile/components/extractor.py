@@ -20,6 +20,7 @@ from reflexio.server.services.extraction.resumable_agent import (
     run_resumable_extraction_agent,
 )
 from reflexio.server.services.extractor_config_utils import get_extractor_name
+from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.extractor_interaction_utils import (
     get_effective_source_filter,
     get_extractor_window_params,
@@ -358,6 +359,12 @@ class ProfileExtractor:
                 request_interaction_data_models=request_interaction_data_models,
             )
 
+        # Append language instruction to extraction definition
+        lang_def = self.config.extraction_definition_prompt.strip()
+        lang_instruction = content_language_instruction(self.config.language)
+        if lang_instruction:
+            lang_def += lang_instruction
+
         messages = construct_profile_extraction_messages_from_sessions(
             prompt_manager=self.request_context.prompt_manager,
             request_interaction_data_models=request_interaction_data_models,
@@ -365,7 +372,7 @@ class ProfileExtractor:
             context_prompt=(
                 self.config.context_prompt.strip() if self.config.context_prompt else ""
             ),
-            extraction_definition_prompt=self.config.extraction_definition_prompt.strip(),
+            extraction_definition_prompt=lang_def,
             existing_profiles=existing_profiles,
         )
 

@@ -328,6 +328,9 @@ class PlaybookGenerationService(
             llm_client=self.client,
             dedup_config=dedup_config,
         )
+        playbook_language = (
+            playbook_config.language if playbook_config else None
+        )
         (
             deduplicated_playbooks,
             existing_ids_to_delete,
@@ -337,6 +340,7 @@ class PlaybookGenerationService(
             generation_request_id,
             self.service_config.agent_version,  # type: ignore[reportOptionalMemberAccess]
             user_id=self.service_config.user_id,  # type: ignore[reportOptionalMemberAccess]
+            language=playbook_language,
         )
         logger.info(
             "User playbook entries after deduplication: %d",

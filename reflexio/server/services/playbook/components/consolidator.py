@@ -18,6 +18,10 @@ from reflexio.models.config_schema import (
 )
 from reflexio.models.structured_output import StrictStructuredOutput
 from reflexio.server.api_endpoints.request_context import RequestContext
+from reflexio.server.services.language_utils import (
+    content_language_instruction,
+    resolve_language,
+)
 from reflexio.server.llm.litellm_client import (
     LiteLLMClient,
     LiteLLMClientError,
@@ -663,6 +667,7 @@ class PlaybookConsolidator(BaseDeduplicator):
         self,
         new_playbooks: list[UserPlaybook],
         existing_playbooks: list[UserPlaybook],
+        language: str | None = None,
     ) -> PlaybookConsolidationOutput:
         """Render the consolidation prompt for NEW + EXISTING playbooks and run the
         LLM decision step (prompt render + LLM call + parse only — no hybrid search,
@@ -700,6 +705,11 @@ class PlaybookConsolidator(BaseDeduplicator):
             decisions) if the LLM returned an unexpected response shape.
         """
         prompt = self._render_consolidation_prompt(new_playbooks, existing_playbooks)
+
+        # Append language instruction to consolidation prompt
+        lang_instruction = content_language_instruction(language)
+        if lang_instruction:
+            prompt += lang_instruction
 
         output_schema_class = self._get_output_schema_class()
 
@@ -768,6 +778,7 @@ class PlaybookConsolidator(BaseDeduplicator):
         user_id: str | None = None,
         *,
         request_id: str | None = None,
+        language: str | None = None,
     ) -> tuple[list[UserPlaybook], list[int], list[tuple[int, list[int]]]]:
         """
         Consolidate user playbook entries across extractors and against existing entries in DB.
@@ -824,7 +835,7 @@ class PlaybookConsolidator(BaseDeduplicator):
         # Run the LLM decision step (prompt render + LLM call + parse only).
         try:
             dedup_output = self._consolidation_decisions(
-                new_playbooks, existing_playbooks
+                new_playbooks, existing_playbooks, language=language
             )
         except Exception as e:
             with sentry_tags(

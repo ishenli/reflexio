@@ -24,8 +24,14 @@ from reflexio.models.api_schema.retriever_schema import (
     GetDashboardStatsResponse,
     GetPlaybookApplicationStatsRequest,
     GetPlaybookApplicationStatsResponse,
+    GetSearchAnalyticsRequest,
+    GetSearchAnalyticsResponse,
     PeriodStats,
+    SearchAnalyticsData,
+    SearchAnalyticsSummary,
     TimeSeriesDataPoint,
+    TopQueryEntry,
+    ModeDistributionEntry,
 )
 
 if TYPE_CHECKING:
@@ -152,6 +158,73 @@ class DashboardMixin(ReflexioBase):
                 success=False,
                 stats=[],
                 msg=f"Failed to get playbook application stats: {str(e)}",
+            )
+
+    def get_search_analytics(
+        self, request: GetSearchAnalyticsRequest | dict
+    ) -> GetSearchAnalyticsResponse:
+        """Get search analytics: time-series, summary stats, top queries,
+        and mode distribution for the look-back window.
+
+        Args:
+            request (GetSearchAnalyticsRequest | dict): Request containing
+                ``days_back``.
+
+        Returns:
+            GetSearchAnalyticsResponse: Response containing search analytics.
+        """
+        if not self._is_storage_configured():
+            empty_data = SearchAnalyticsData()
+            return GetSearchAnalyticsResponse(
+                success=True, data=empty_data, msg=STORAGE_NOT_CONFIGURED_MSG
+            )
+        try:
+            if isinstance(request, dict):
+                request = GetSearchAnalyticsRequest(**request)
+
+            analytics_dict = self._get_storage().get_search_analytics(
+                org_id=self.request_context.org_id,
+                days_back=request.days_back or 30,
+            )
+
+            summary = SearchAnalyticsSummary(**analytics_dict["summary"])
+            searches_ts = [
+                TimeSeriesDataPoint(**ts)
+                for ts in analytics_dict["searches_time_series"]
+            ]
+            results_ts = [
+                TimeSeriesDataPoint(**ts)
+                for ts in analytics_dict["results_time_series"]
+            ]
+            latency_ts = [
+                TimeSeriesDataPoint(**ts)
+                for ts in analytics_dict["latency_time_series"]
+            ]
+            top_queries = [
+                TopQueryEntry(**tq) for tq in analytics_dict["top_queries"]
+            ]
+            mode_dist = [
+                ModeDistributionEntry(**md)
+                for md in analytics_dict["mode_distribution"]
+            ]
+
+            data = SearchAnalyticsData(
+                searches_time_series=searches_ts,
+                results_time_series=results_ts,
+                latency_time_series=latency_ts,
+                summary=summary,
+                top_queries=top_queries,
+                mode_distribution=mode_dist,
+            )
+            return GetSearchAnalyticsResponse(
+                success=True,
+                data=data,
+                msg="Retrieved search analytics successfully",
+            )
+        except Exception as e:
+            return GetSearchAnalyticsResponse(
+                success=False,
+                msg=f"Failed to get search analytics: {str(e)}",
             )
 
     # ==============================

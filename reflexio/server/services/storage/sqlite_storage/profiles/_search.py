@@ -26,6 +26,7 @@ from .._base import (
     _build_status_sql,
     _effective_search_mode,
     _epoch_now,
+    _is_pure_chinese_query,
     _row_to_interaction,
     _row_to_profile,
     _sanitize_fts_query,
@@ -224,39 +225,69 @@ class ProfileSearchMixin:
                 threshold=threshold,
             )
         elif has_query:
-            fts_query = _sanitize_fts_query(req.query)  # type: ignore[arg-type]
-            sql = f"""SELECT p.* FROM profiles p
-                      JOIN profiles_fts f ON p.profile_id = f.profile_id
-                      WHERE profiles_fts MATCH ?
-                      AND {where_clause}
-                      ORDER BY bm25(profiles_fts, 0.0, 1.0)
-                      LIMIT ?"""
-            params_list: list[object] = [fts_query, *params, overfetch]
-            fts_rows = self._fetchall(sql, tuple(params_list))
-            logger.info("FTS search: %d results from BM25", len(fts_rows))
+            # FTS5 with porter unicode61 tokenizer doesn't work well for CJK text.
+            # Fall back to LIKE-based search for pure Chinese queries.
+            if _is_pure_chinese_query(req.query):
+                logger.info(
+                    "Pure Chinese query detected (%s), using LIKE fallback instead of FTS",
+                    req.query,
+                )
+                # Use LIKE to search in content (includes custom_features and expanded_terms)
+                like_pattern = f"%{req.query}%"
+                fts_like_sql = f"""SELECT p.* FROM profiles p
+                                   WHERE p.content LIKE ? ESCAPE '\\'
+                                   AND {where_clause}
+                                   ORDER BY p.last_modified_timestamp DESC
+                                   LIMIT ?"""
+                fts_like_params: list[object] = [like_pattern, *params, overfetch]
+                fts_rows = self._fetchall("SELECT p.* FROM profiles p WHERE p.content LIKE ?", (like_pattern,))
 
-            if mode == SearchMode.HYBRID and query_embedding:
-                logger.info("HYBRID merging FTS + vector results via RRF")
-                vec_limit = match_count * 10
-                vec_sql = f"""SELECT p.* FROM profiles p
-                              WHERE {where_clause}
-                              ORDER BY p.last_modified_timestamp DESC
-                              LIMIT ?"""
-                vec_candidates = self._fetchall(vec_sql, (*params, vec_limit))
-                vec_rows = _vector_rank_rows(
-                    vec_candidates,
-                    query_embedding,
-                    overfetch,
-                    threshold=threshold,
-                )
-                rows = _true_rrf_merge(
-                    fts_rows,
-                    vec_rows,
-                    "profile_id",
-                    match_count,
-                )
+                # Also search custom_features JSON if present
+                sql_with_features = f"""SELECT p.* FROM profiles p
+                                        WHERE (p.content LIKE ? ESCAPE '\\'
+                                           OR p.custom_features LIKE ? ESCAPE '\\')
+                                        AND {where_clause}
+                                        ORDER BY p.last_modified_timestamp DESC
+                                        LIMIT ?"""
+                fts_like_params_full: list[object] = [like_pattern, like_pattern, *params, overfetch]
+                fts_rows = self._fetchall(sql_with_features, tuple(fts_like_params_full))
+                logger.info("LIKE search (Chinese fallback): %d results", len(fts_rows))
+                rows = fts_rows[:match_count]
             else:
-                rows = fts_rows
+                # Standard FTS search for non-Chinese queries
+                fts_query = _sanitize_fts_query(req.query)  # type: ignore[arg-type]
+                sql = f"""SELECT p.* FROM profiles p
+                          JOIN profiles_fts f ON p.profile_id = f.profile_id
+                          WHERE profiles_fts MATCH ?
+                          AND {where_clause}
+                          ORDER BY bm25(profiles_fts, 0.0, 1.0)
+                          LIMIT ?"""
+                params_list: list[object] = [fts_query, *params, overfetch]
+                fts_rows = self._fetchall(sql, tuple(params_list))
+                logger.info("FTS search: %d results from BM25", len(fts_rows))
+
+                if mode == SearchMode.HYBRID and query_embedding:
+                    logger.info("HYBRID merging FTS + vector results via RRF")
+                    vec_limit = match_count * 10
+                    vec_sql = f"""SELECT p.* FROM profiles p
+                                  WHERE {where_clause}
+                                  ORDER BY p.last_modified_timestamp DESC
+                                  LIMIT ?"""
+                    vec_candidates = self._fetchall(vec_sql, (*params, vec_limit))
+                    vec_rows = _vector_rank_rows(
+                        vec_candidates,
+                        query_embedding,
+                        overfetch,
+                        threshold=threshold,
+                    )
+                    rows = _true_rrf_merge(
+                        fts_rows,
+                        vec_rows,
+                        "profile_id",
+                        match_count,
+                    )
+                else:
+                    rows = fts_rows
         elif query_embedding:
             # HYBRID without query text: rank by embedding only
             if req.generated_from_request_id:

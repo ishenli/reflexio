@@ -87,7 +87,31 @@ def _json_loads(text: str | None) -> Any:
 
 _FTS5_OPERATORS = frozenset({"OR", "AND", "NOT"})
 _FTS5_RESERVED = _FTS5_OPERATORS | {"NEAR"}
-_TOKEN_RE = re.compile(r"[a-zA-Z0-9_]+")
+_TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
+_CHINESE_RE = re.compile(r"[一-鿿]")
+
+
+def _is_pure_chinese_query(text: str) -> bool:
+    """Check if query contains only CJK characters (no ASCII letters/digits).
+
+    FTS5 with porter unicode61 tokenizer doesn't work well for pure Chinese.
+    When this returns True, we should use LIKE fallback instead of FTS MATCH.
+
+    Args:
+        text: Raw user query string
+
+    Returns:
+        True if query contains only CJK characters (and possibly Chinese punctuation)
+    """
+    if not text:
+        return False
+    # Remove common Chinese punctuation
+    chinese_text = re.sub(r"[，。！？；：、\"\"''（）【】《》]", "", text)
+    # Check if remaining text has any ASCII letters/digits
+    has_ascii = bool(re.search(r"[a-zA-Z0-9]", chinese_text))
+    # Check if it has Chinese characters
+    has_chinese = bool(_CHINESE_RE.search(chinese_text))
+    return has_chinese and not has_ascii
 
 
 def _sanitize_fts_query(text: str) -> str:
@@ -128,7 +152,15 @@ def _sanitize_fts_query(text: str) -> str:
         return '""'
 
     # Append prefix wildcard to last token for partial-word matching
-    parts[-1] = parts[-1] + "*"
+    # Note: FTS5's porter stemmer doesn't work well with CJK characters,
+    # and prefix wildcard (*) doesn't work with unicode61 tokenizer for Chinese
+    last_token = parts[-1]
+    if _CHINESE_RE.search(last_token):
+        # For CJK text, use exact match without wildcard
+        pass
+    else:
+        last_token = last_token + "*"
+    parts[-1] = last_token
     return " ".join(parts)
 
 
@@ -2367,5 +2399,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS learning_jobs_coalesce
     ON learning_jobs (org_id, user_id, job_type) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS learning_jobs_poll
     ON learning_jobs (created_at) WHERE status IN ('pending','failed','claimed');
+
+-- ============================================================================
+-- Search logging
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS search_logs (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id                  TEXT    NOT NULL,
+    query_text              TEXT    NOT NULL,
+    reformulated_query      TEXT,
+    search_mode             TEXT    NOT NULL DEFAULT 'hybrid',
+    effective_search_mode   TEXT,
+    entity_types            TEXT,
+    total_results           INTEGER NOT NULL DEFAULT 0,
+    profile_results         INTEGER DEFAULT 0,
+    agent_playbook_results  INTEGER DEFAULT 0,
+    user_playbook_results   INTEGER DEFAULT 0,
+    interaction_results     INTEGER DEFAULT 0,
+    threshold               REAL,
+    top_k                   INTEGER,
+    latency_ms              INTEGER,
+    caller_type             TEXT,
+    request_id              TEXT,
+    session_id              TEXT,
+    user_id                 TEXT,
+    reformulation_enabled   INTEGER NOT NULL DEFAULT 0,
+    embedding_failed        INTEGER NOT NULL DEFAULT 0,
+    recency_on              INTEGER NOT NULL DEFAULT 0,
+    floor_on                INTEGER NOT NULL DEFAULT 0,
+    endpoint                TEXT    NOT NULL DEFAULT '',
+    created_at              TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_search_logs_org_id ON search_logs(org_id);
+CREATE INDEX IF NOT EXISTS idx_search_logs_created_at ON search_logs(created_at);
 
 """

@@ -77,6 +77,36 @@ export interface PlaybookApplicationStat {
 }
 
 // =============================
+// Search Analytics Types
+// =============================
+
+export interface SearchAnalyticsSummary {
+  total_searches: number;
+  avg_results_per_search: number;
+  zero_result_rate: number;
+  avg_latency_ms: number;
+}
+
+export interface TopQueryEntry {
+  query: string;
+  count: number;
+}
+
+export interface ModeDistributionEntry {
+  mode: string;
+  count: number;
+}
+
+export interface SearchAnalyticsData {
+  searches_time_series: TimeSeriesDataPoint[];
+  results_time_series: TimeSeriesDataPoint[];
+  latency_time_series: TimeSeriesDataPoint[];
+  summary: SearchAnalyticsSummary | null;
+  top_queries: TopQueryEntry[];
+  mode_distribution: ModeDistributionEntry[];
+}
+
+// =============================
 // View Types (API responses)
 // =============================
 

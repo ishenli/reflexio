@@ -17,6 +17,7 @@ from reflexio.server.api_endpoints.request_context import RequestContext
 from reflexio.server.llm.litellm_client import LiteLLMClient, LiteLLMConfig
 from reflexio.server.llm.model_defaults import ModelRole, resolve_model_name
 from reflexio.server.services.extraction.agent_run_records import build_scope_hash
+from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.extraction.pending_tool_call_dispatch import (
     PendingToolCallToolContext,
 )
@@ -453,6 +454,12 @@ class ExtractionResumeWorker:
             service_config=service_config,
             agent_context=agent_context,
         )
+        # Append language instruction to extraction definition
+        profile_def = extractor_config.extraction_definition_prompt.strip()
+        lang_instruction = content_language_instruction(extractor_config.language)
+        if lang_instruction:
+            profile_def += lang_instruction
+
         messages = construct_profile_extraction_messages_from_sessions(
             prompt_manager=self.request_context.prompt_manager,
             request_interaction_data_models=request_interaction_data_models,
@@ -462,7 +469,7 @@ class ExtractionResumeWorker:
                 if extractor_config.context_prompt
                 else ""
             ),
-            extraction_definition_prompt=extractor_config.extraction_definition_prompt.strip(),
+            extraction_definition_prompt=profile_def,
             existing_profiles=context_profiles,
         )
         result = self._resume_agent(
@@ -537,6 +544,10 @@ class ExtractionResumeWorker:
             if extractor_config.extraction_definition_prompt
             else ""
         )
+        # Append language instruction to playbook definition
+        lang_instruction = content_language_instruction(extractor_config.language)
+        if lang_instruction:
+            playbook_definition += lang_instruction
         all_interactions = extract_interactions_from_request_interaction_data_models(
             request_interaction_data_models
         )

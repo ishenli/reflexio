@@ -682,6 +682,64 @@ class GetPlaybookApplicationStatsResponse(BaseModel):
 
 
 # ===============================
+# Search Analytics Models
+# ===============================
+
+
+class GetSearchAnalyticsRequest(BaseModel):
+    """Request for search analytics data.
+
+    Args:
+        days_back (int): Look-back window in days. Defaults to 30; must be
+            positive.
+    """
+
+    days_back: int = Field(default=30, gt=0)
+
+
+class SearchAnalyticsSummary(BaseModel):
+    """Aggregate search metrics for the look-back window."""
+
+    total_searches: int = 0
+    avg_results_per_search: float = 0.0
+    zero_result_rate: float = 0.0
+    avg_latency_ms: float = 0.0
+
+
+class TopQueryEntry(BaseModel):
+    """A single entry in the top-queries list."""
+
+    query: str
+    count: int
+
+
+class ModeDistributionEntry(BaseModel):
+    """A single entry in the search-mode distribution."""
+
+    mode: str
+    count: int
+
+
+class SearchAnalyticsData(BaseModel):
+    """All search analytics data for the look-back window."""
+
+    searches_time_series: list[TimeSeriesDataPoint] = Field(default_factory=list)
+    results_time_series: list[TimeSeriesDataPoint] = Field(default_factory=list)
+    latency_time_series: list[TimeSeriesDataPoint] = Field(default_factory=list)
+    summary: SearchAnalyticsSummary | None = None
+    top_queries: list[TopQueryEntry] = Field(default_factory=list)
+    mode_distribution: list[ModeDistributionEntry] = Field(default_factory=list)
+
+
+class GetSearchAnalyticsResponse(BaseModel):
+    """Response containing search analytics data."""
+
+    success: bool
+    data: SearchAnalyticsData | None = None
+    msg: str | None = None
+
+
+# ===============================
 # Query Reformulation Models
 # ===============================
 
@@ -890,6 +948,17 @@ class GetRequestsViewResponse(BaseModel):
     success: bool
     sessions: list[SessionView]
     has_more: bool = False
+    msg: str | None = None
+
+
+class GetSessionStatsViewResponse(BaseModel):
+    """API response for aggregate session statistics."""
+
+    success: bool
+    total_sessions: int = 0
+    total_requests: int = 0
+    total_interactions: int = 0
+    unique_users: int = 0
     msg: str | None = None
 
 

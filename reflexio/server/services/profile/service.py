@@ -180,9 +180,18 @@ class ProfileGenerationService(
                 llm_client=self.client,
                 output_pending_status=self.output_pending_status,
             )
+            # Get language from profile extractor config for dedup instruction
+            config = self.configurator.get_config()
+            profile_config = getattr(config, "profile_extractor_config", None)
+            dedup_language = (
+                profile_config.language if profile_config else None
+            )
             all_new_profiles, existing_ids_to_delete, _superseded_profiles = (
                 consolidator.deduplicate(
-                    all_new_profiles, user_id, generation_request_id
+                    all_new_profiles,
+                    user_id,
+                    generation_request_id,
+                    language=dedup_language,
                 )
             )
             logger.info(

@@ -102,6 +102,23 @@ class ExtrasMixin:
         raise NotImplementedError
 
     # ==============================
+    # Session stats support
+    # ==============================
+
+    def get_session_stats(self) -> dict:
+        """Return aggregate counts across all sessions: total sessions, total
+        requests, total interactions, unique users.
+
+        Default implementation returns zeros; concrete backends override.
+        """
+        return {
+            "total_sessions": 0,
+            "total_requests": 0,
+            "total_interactions": 0,
+            "unique_users": 0,
+        }
+
+    # ==============================
     # Evaluation-overview support (default no-ops; backends override)
     # ==============================
 
@@ -223,3 +240,32 @@ class ExtrasMixin:
         Used by EvaluationOverviewService to surface Braintrust tiles.
         """
         return []
+
+    # ==============================
+    # Search logging and analytics
+    # ==============================
+
+    @abstractmethod
+    def insert_search_log(self, log_entry: dict) -> None:
+        """Insert a single search log entry (fire-and-forget).
+
+        Args:
+            log_entry (dict): Dictionary containing all search log fields.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_search_analytics(self, org_id: str, days_back: int = 30) -> dict:
+        """Return search analytics: time-series, summary stats, top queries,
+        and mode distribution for the look-back window.
+
+        Args:
+            org_id (str): Organization ID to scope the analytics.
+            days_back (int): Look-back window in days. Defaults to 30.
+
+        Returns:
+            dict: Search analytics data keyed by ``searches_time_series``,
+                ``results_time_series``, ``latency_time_series``,
+                ``summary``, ``top_queries``, and ``mode_distribution``.
+        """
+        raise NotImplementedError

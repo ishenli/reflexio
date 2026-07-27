@@ -23,7 +23,7 @@ export function TopBar() {
           <Menu className="h-4 w-4" />
         </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0">
-          <Sidebar />
+          <Sidebar collapsed={false} onToggle={() => {}} />
         </SheetContent>
       </Sheet>
 

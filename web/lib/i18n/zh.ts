@@ -9,11 +9,13 @@ export const zh: LocaleDict = {
     agentPlaybooks: "Agent 经验",
     userPlaybooks: "用户经验",
     search: "搜索",
+    searchAnalytics: "搜索分析",
     settings: "设置",
     requests: "请求记录",
     sessions: "会话列表",
     configure: "配置",
     editConfig: "编辑配置",
+    collapseSidebar: "收起侧边栏",
   },
 
   common: {
@@ -32,6 +34,7 @@ export const zh: LocaleDict = {
     name: "名称",
     user: "用户",
     version: "版本",
+    agent: "Agent",
     tags: "标签",
     date: "日期",
     actions: "操作",
@@ -42,6 +45,9 @@ export const zh: LocaleDict = {
     archivedItems: "已归档",
     uniqueUsers: "独立用户",
     clear: "清除",
+    prev: "上一页",
+    next: "下一页",
+    edit: "编辑",
   },
 
   dashboard: {
@@ -64,6 +70,35 @@ export const zh: LocaleDict = {
     topSources: "主要来源",
     profilesByExtractor: "提取器分布",
     noProfileChanges: "暂无画像变更记录",
+    // Overview header
+    dashboardTitle: "仪表盘",
+    dashboardDesc: "Reflexio 实例指标概览",
+    // Stat cards
+    statInteractions: "交互记录",
+    statInteractionsDesc: "统计周期内交互总数",
+    statUserProfiles: "用户画像",
+    statUserProfilesDesc: "活跃用户画像数",
+    statPlaybooks: "经验",
+    statPlaybooksDesc: "活跃经验数",
+    statSuccessRate: "成功率",
+    statSuccessRateDesc: "Agent 成功率",
+    vsPreviousPeriod: "较上一周期",
+    // Time series charts
+    chartInteractions: "交互趋势",
+    chartProfiles: "画像趋势",
+    chartPlaybooks: "经验趋势",
+    chartEvalSuccessRate: "评估成功率趋势",
+    // Top applied rules
+    topAppliedRules: "规则应用排行",
+    topAppliedRulesDesc: "最常被应用的经验和画像",
+    noRuleData: "暂无规则应用数据",
+    tooltipApplied: "应用次数",
+    tooltipType: "类型",
+    // Time range
+    timeRange7d: "7天",
+    timeRange14d: "14天",
+    timeRange30d: "30天",
+    timeRange90d: "90天",
     // Interactions
     interactionsOverTime: "交互趋势",
     messageRoles: "消息角色",
@@ -151,6 +186,16 @@ export const zh: LocaleDict = {
     operationStatusUnavailable: "无法获取任务状态",
     error: "错误",
     anUnknownErrorOccurred: "发生未知错误",
+    editProfileTitle: "编辑画像内容",
+    editProfileContent: "内容",
+    editContentPlaceholder: "输入画像内容…",
+    saving: "保存中",
+    save: "保存",
+    deleteProfileTitle: "删除画像",
+    deleteProfileConfirm: '删除画像 "{id}"？此操作不可撤销。',
+    deleteProfileWarning: "这将永久删除该画像及其所有关联数据。",
+    deleteProfileSuccess: '画像 "{id}" 删除成功。',
+    updateProfileSuccess: '画像 "{id}" 更新成功。',
   },
 
   userPlaybooks: {
@@ -223,6 +268,8 @@ export const zh: LocaleDict = {
     sourceLabel: "来源",
     agentLabel: "Agent",
     evalOnly: "仅评估",
+    lastActivity: "最后活跃",
+    firstMessage: "首次提问",
     noData: "暂无数据",
     yes: "是",
     no: "否",
@@ -230,6 +277,11 @@ export const zh: LocaleDict = {
     deleteSuccess: '已删除会话 "{id}"（移除了 {count} 个请求）',
     deleteFail: "删除失败：{msg}",
     deleteFailed: "删除失败",
+    details: "会话详情",
+    filterUser: "用户",
+    filterAgent: "Agent",
+    allUsers: "全部用户",
+    allAgents: "全部 Agent",
   },
 
   evaluations: {
@@ -319,6 +371,28 @@ export const zh: LocaleDict = {
   topBar: {
     apiDocs: "Reflexio API 文档",
     apiReference: "API 参考",
+  },
+
+  searchAnalytics: {
+    title: "搜索分析",
+    desc: "跟踪和分析搜索使用情况和效果",
+    statTotalSearches: "总搜索次数",
+    statTotalSearchesDesc: "时间段内所有搜索请求",
+    statAvgResults: "平均结果数/搜索",
+    statAvgResultsDesc: "每次查询平均返回的结果数",
+    statZeroResultRate: "零结果率",
+    statZeroResultRateDesc: "未返回任何结果的搜索占比",
+    statAvgLatency: "平均延迟",
+    statAvgLatencyDesc: "搜索平均响应时间",
+    chartSearchesPerDay: "每日搜索次数",
+    chartResultsPerDay: "每日平均结果数",
+    chartLatencyPerDay: "每日平均延迟 (ms)",
+    topQueries: "热门查询",
+    topQueriesDesc: "最频繁的搜索关键词",
+    modeDistribution: "搜索模式分布",
+    modeDistributionDesc: "按搜索模式分类统计",
+    queryColumn: "查询",
+    countColumn: "次数",
   },
 
   searchPage: {

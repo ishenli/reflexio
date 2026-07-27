@@ -163,6 +163,58 @@ export async function downgradeAllProfiles(
   return res.json();
 }
 
+// ─── Single Profile Operations ─────────────────────────────────────
+
+export interface UpdateProfileParams {
+  user_id: string;
+  profile_id: string;
+  content?: string;
+  custom_features?: Record<string, unknown> | null;
+}
+
+export interface UpdateProfileResult {
+  success: boolean;
+  msg?: string;
+}
+
+export async function updateProfile(
+  apiEndpoint: string,
+  params: UpdateProfileParams,
+): Promise<UpdateProfileResult> {
+  const url = `${apiEndpoint.replace(/\/$/, "")}/api/update_user_profile`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(`Failed to update profile (HTTP ${res.status})`);
+  return res.json();
+}
+
+export interface DeleteProfileParams {
+  user_id: string;
+  profile_id: string;
+}
+
+export interface DeleteProfileResult {
+  success: boolean;
+  msg?: string;
+}
+
+export async function deleteProfile(
+  apiEndpoint: string,
+  params: DeleteProfileParams,
+): Promise<DeleteProfileResult> {
+  const url = `${apiEndpoint.replace(/\/$/, "")}/api/delete_profile`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(`Failed to delete profile (HTTP ${res.status})`);
+  return res.json();
+}
+
 export async function fetchAllProfilesData(
   apiEndpoint: string,
   limit: number = 200

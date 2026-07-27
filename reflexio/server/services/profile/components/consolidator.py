@@ -26,6 +26,7 @@ from reflexio.server.services.deduplication_utils import (
     parse_item_id,
     resolve_dedup_query_embeddings,
 )
+from reflexio.server.services.language_utils import content_language_instruction
 from reflexio.server.services.profile.profile_generation_service_utils import (
     ProfileTimeToLive,
     calculate_expiration_timestamp,
@@ -500,6 +501,7 @@ class ProfileConsolidator(BaseDeduplicator):
         new_profiles: list[UserProfile],
         user_id: str,
         request_id: str,
+        language: str | None = None,
     ) -> tuple[list[UserProfile], list[str], list[UserProfile]]:
         """
         Deduplicate profiles across extractors and against existing profiles in DB.
@@ -538,6 +540,11 @@ class ProfileConsolidator(BaseDeduplicator):
                 "existing_profiles": existing_text,
             },
         )
+
+        # Append language instruction to dedup prompt
+        lang_instruction = content_language_instruction(language)
+        if lang_instruction:
+            prompt += lang_instruction
 
         output_schema_class = self._get_output_schema_class()
 

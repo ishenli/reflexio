@@ -441,6 +441,13 @@ class ProfileExtractorConfig(_ExtractorWindowOverrideCompatMixin, BaseModel):
     # (one profile extractor per org), so the name is accepted but ignored.
     extractor_name: NonEmptyStr | None = None
     extraction_definition_prompt: SanitizedNonEmptyStr
+    language: str | None = Field(
+        default=None,
+        description=(
+            "Output language for extracted content. Supported: 'en' (English), "
+            "'zh' (Chinese). Defaults to 'zh' when None."
+        ),
+    )
     context_prompt: str | None = None
     tagging_definition_prompt: str | None = None
     should_extract_profile_prompt_override: str | None = None
@@ -492,6 +499,13 @@ class UserPlaybookExtractorConfig(_ExtractorWindowOverrideCompatMixin, BaseModel
     # (one playbook extractor per org), so the name is accepted but ignored.
     extractor_name: NonEmptyStr | None = None
     extraction_definition_prompt: SanitizedNonEmptyStr
+    language: str | None = Field(
+        default=None,
+        description=(
+            "Output language for extracted content. Supported: 'en' (English), "
+            "'zh' (Chinese). Defaults to 'zh' when None."
+        ),
+    )
     context_prompt: str | None = None
     tagging_definition_prompt: str | None = None
     aggregation_config: PlaybookAggregatorConfig | None = None

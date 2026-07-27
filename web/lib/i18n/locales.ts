@@ -10,11 +10,13 @@ export interface LocaleDict {
     agentPlaybooks: string;
     userPlaybooks: string;
     search: string;
+    searchAnalytics: string;
     settings: string;
     requests: string;
     sessions: string;
     configure: string;
     editConfig: string;
+    collapseSidebar: string;
   };
 
   // Search Page
@@ -53,6 +55,7 @@ export interface LocaleDict {
     name: string;
     user: string;
     version: string;
+    agent: string;
     tags: string;
     date: string;
     actions: string;
@@ -63,6 +66,9 @@ export interface LocaleDict {
     archivedItems: string;
     uniqueUsers: string;
     clear: string;
+    prev: string;
+    next: string;
+    edit: string;
   };
 
   // Dashboard
@@ -86,6 +92,35 @@ export interface LocaleDict {
     topSources: string;
     profilesByExtractor: string;
     noProfileChanges: string;
+    // Overview header
+    dashboardTitle: string;
+    dashboardDesc: string;
+    // Stat cards
+    statInteractions: string;
+    statInteractionsDesc: string;
+    statUserProfiles: string;
+    statUserProfilesDesc: string;
+    statPlaybooks: string;
+    statPlaybooksDesc: string;
+    statSuccessRate: string;
+    statSuccessRateDesc: string;
+    vsPreviousPeriod: string;
+    // Time series charts
+    chartInteractions: string;
+    chartProfiles: string;
+    chartPlaybooks: string;
+    chartEvalSuccessRate: string;
+    // Top applied rules
+    topAppliedRules: string;
+    topAppliedRulesDesc: string;
+    noRuleData: string;
+    tooltipApplied: string;
+    tooltipType: string;
+    // Time range
+    timeRange7d: string;
+    timeRange14d: string;
+    timeRange30d: string;
+    timeRange90d: string;
     // Interactions
     interactionsOverTime: string;
     messageRoles: string;
@@ -171,6 +206,16 @@ export interface LocaleDict {
     operationStatusUnavailable: string;
     error: string;
     anUnknownErrorOccurred: string;
+    editProfileTitle: string;
+    editProfileContent: string;
+    editContentPlaceholder: string;
+    saving: string;
+    save: string;
+    deleteProfileTitle: string;
+    deleteProfileConfirm: string;
+    deleteProfileWarning: string;
+    deleteProfileSuccess: string;
+    updateProfileSuccess: string;
   };
 
   // User Playbooks
@@ -244,12 +289,19 @@ export interface LocaleDict {
     sourceLabel: string;
     agentLabel: string;
     evalOnly: string;
+    lastActivity: string;
+    firstMessage: string;
     yes: string;
     no: string;
     deleteConfirm: string;
     deleteSuccess: string;
     deleteFail: string;
     deleteFailed: string;
+    details: string;
+    filterUser: string;
+    filterAgent: string;
+    allUsers: string;
+    allAgents: string;
   };
 
   // Evaluations
@@ -343,6 +395,29 @@ export interface LocaleDict {
   topBar: {
     apiDocs: string;
     apiReference: string;
+  };
+
+  // Search Analytics
+  searchAnalytics: {
+    title: string;
+    desc: string;
+    statTotalSearches: string;
+    statTotalSearchesDesc: string;
+    statAvgResults: string;
+    statAvgResultsDesc: string;
+    statZeroResultRate: string;
+    statZeroResultRateDesc: string;
+    statAvgLatency: string;
+    statAvgLatencyDesc: string;
+    chartSearchesPerDay: string;
+    chartResultsPerDay: string;
+    chartLatencyPerDay: string;
+    topQueries: string;
+    topQueriesDesc: string;
+    modeDistribution: string;
+    modeDistributionDesc: string;
+    queryColumn: string;
+    countColumn: string;
   };
 }
 

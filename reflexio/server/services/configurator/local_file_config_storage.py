@@ -58,9 +58,11 @@ class LocalFileConfigStorage(ConfigStorage):
             storage_config=self._default_storage_config(),
             profile_extractor_config=ProfileExtractorConfig(
                 extraction_definition_prompt="Extract key user information including name, role, preferences, and any other relevant profile details from the conversation.",
+                language="zh",
             ),
             user_playbook_extractor_config=PlaybookConfig(
                 extraction_definition_prompt="Extract playbook rules about agent performance, including areas where the agent was helpful, areas for improvement, and any issues encountered during the interaction.",
+                language="zh",
             ),
         )
 

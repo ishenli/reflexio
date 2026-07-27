@@ -20,6 +20,7 @@ from reflexio.models.api_schema.retriever_schema import (
     GetInteractionsViewResponse,
     GetRequestsRequest,
     GetRequestsViewResponse,
+    GetSessionStatsViewResponse,
     RequestDataView,
     SessionView,
 )
@@ -274,6 +275,31 @@ def get_requests_endpoint(
         has_more=internal_response.has_more,
         msg=internal_response.msg,
     )
+
+
+@router.get(
+    "/api/get_session_stats",
+    response_model=GetSessionStatsViewResponse,
+    response_model_exclude_none=True,
+)
+def get_session_stats_endpoint(
+    org_id: str = Depends(default_get_org_id),
+) -> GetSessionStatsViewResponse:
+    """Return aggregate counts across all sessions.
+
+    Returns total sessions, total requests, total interactions, and
+    unique user count — computed from the full dataset, not just the
+    current page.
+    """
+    try:
+        reflexio = reflexio_cache.get_reflexio(org_id=org_id)
+        stats = reflexio.request_context.storage.get_session_stats()
+        return GetSessionStatsViewResponse(
+            success=True,
+            **stats,
+        )
+    except Exception as e:
+        return GetSessionStatsViewResponse(success=False, msg=str(e))
 
 
 @router.get(

@@ -1,5 +1,6 @@
 """Search/retrieval route handlers (extracted from api.py, Tier3 A2)."""
 
+import json
 import logging
 import time
 from typing import TYPE_CHECKING, Any
@@ -52,6 +53,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _log_search_request(
+    *,
+    org_id: str,
+    log_entry: dict,
+) -> None:
+    """Write a search log entry to storage (fire-and-forget).
+
+    Follows the ``_meter_search_request`` pattern: resolves the Reflexio
+    instance through the cache, calls ``insert_search_log``, and silently
+    catches exceptions so a logging failure never affects the response.
+    """
+    try:
+        reflexio = reflexio_cache.get_reflexio(org_id=org_id)
+        if (storage := reflexio._get_storage()) is not None:  # noqa: SLF001
+            storage.insert_search_log(log_entry)
+    except Exception:
+        logger.warning(
+            "search-log write failed for org %s", org_id, exc_info=True,
+        )
+
+
+def _entity_types_json(entity_types: list[str] | None) -> str | None:
+    """Serialize entity types list to JSON for storage."""
+    if not entity_types:
+        return None
+    return json.dumps(entity_types)
+
+
 @router.post(
     "/api/search_profiles",
     response_model=SearchProfilesViewResponse,
@@ -61,10 +90,12 @@ router = APIRouter()
 def search_user_profiles(
     request: Request,
     payload: SearchUserProfileRequest,
+    background_tasks: BackgroundTasks,
     org_id: str = Depends(default_get_org_id),
     caller_type: str = Depends(default_get_caller_type),
     _gate: None = Depends(default_billing_gate("application")),  # noqa: B008
 ) -> SearchProfilesViewResponse:
+    t0 = time.monotonic()
     response = _run_limited_api(
         org_id,
         "search",
@@ -72,6 +103,7 @@ def search_user_profiles(
             payload
         ),
     )
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
     resp = SearchProfilesViewResponse(
         success=response.success,
         user_profiles=[to_profile_view(p) for p in response.user_profiles],
@@ -90,6 +122,27 @@ def search_user_profiles(
         request_id=getattr(payload, "request_id", None),
         session_id=getattr(payload, "session_id", None),
     )
+    background_tasks.add_task(
+        _log_search_request,
+        org_id=org_id,
+        log_entry={
+            "org_id": org_id,
+            "query_text": payload.query or "",
+            "search_mode": payload.search_mode.value
+            if hasattr(payload.search_mode, "value")
+            else str(payload.search_mode),
+            "total_results": len(resp.user_profiles),
+            "profile_results": len(resp.user_profiles),
+            "threshold": payload.threshold,
+            "top_k": payload.top_k,
+            "latency_ms": elapsed_ms,
+            "caller_type": caller_type,
+            "request_id": getattr(payload, "request_id", None),
+            "session_id": getattr(payload, "session_id", None),
+            "user_id": payload.user_id,
+            "endpoint": "search_profiles",
+        },
+    )
     return resp
 
 
@@ -102,6 +155,7 @@ def search_user_profiles(
 def rerank_user_profiles(
     request: Request,
     payload: RerankUserProfilesRequest,
+    background_tasks: BackgroundTasks,
     org_id: str = Depends(default_get_org_id),
 ) -> SearchProfilesViewResponse:
     """Rerank a list of profile ids by query relevance using a cross-encoder.
@@ -114,12 +168,28 @@ def rerank_user_profiles(
     Returns:
         SearchProfilesViewResponse: Reranked profiles, top_k entries.
     """
+    t0 = time.monotonic()
     response = _run_limited_api(
         org_id,
         "search",
         lambda: reflexio_cache.get_reflexio(org_id=org_id).rerank_user_profiles(
             payload
         ),
+    )
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    background_tasks.add_task(
+        _log_search_request,
+        org_id=org_id,
+        log_entry={
+            "org_id": org_id,
+            "query_text": payload.query,
+            "total_results": len(response.user_profiles),
+            "profile_results": len(response.user_profiles),
+            "top_k": payload.top_k,
+            "latency_ms": elapsed_ms,
+            "user_id": payload.user_id,
+            "endpoint": "rerank_user_profiles",
+        },
     )
     return SearchProfilesViewResponse(
         success=response.success,
@@ -137,18 +207,41 @@ def rerank_user_profiles(
 def search_interactions(
     request: Request,
     payload: SearchInteractionRequest,
+    background_tasks: BackgroundTasks,
     org_id: str = Depends(default_get_org_id),
 ) -> SearchInteractionsViewResponse:
+    t0 = time.monotonic()
     response = _run_limited_api(
         org_id,
         "search",
         lambda: reflexio_cache.get_reflexio(org_id=org_id).search_interactions(payload),
     )
-    return SearchInteractionsViewResponse(
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    resp = SearchInteractionsViewResponse(
         success=response.success,
         interactions=[to_interaction_view(i) for i in response.interactions],
         msg=response.msg,
     )
+    background_tasks.add_task(
+        _log_search_request,
+        org_id=org_id,
+        log_entry={
+            "org_id": org_id,
+            "query_text": payload.query or "",
+            "search_mode": payload.search_mode.value
+            if hasattr(payload.search_mode, "value")
+            else str(payload.search_mode),
+            "total_results": len(resp.interactions),
+            "interaction_results": len(resp.interactions),
+            "threshold": payload.threshold,
+            "top_k": payload.top_k,
+            "latency_ms": elapsed_ms,
+            "request_id": getattr(payload, "request_id", None),
+            "user_id": payload.user_id,
+            "endpoint": "search_interactions",
+        },
+    )
+    return resp
 
 
 @router.post(
@@ -160,6 +253,7 @@ def search_interactions(
 def search_user_playbooks_endpoint(
     request: Request,
     payload: SearchUserPlaybookRequest,
+    background_tasks: BackgroundTasks,
     org_id: str = Depends(default_get_org_id),
     caller_type: str = Depends(default_get_caller_type),
     _gate: None = Depends(default_billing_gate("application")),  # noqa: B008
@@ -178,6 +272,7 @@ def search_user_playbooks_endpoint(
     Returns:
         SearchUserPlaybooksViewResponse: Response containing matching user playbooks
     """
+    t0 = time.monotonic()
     response = _run_limited_api(
         org_id,
         "search",
@@ -185,6 +280,7 @@ def search_user_playbooks_endpoint(
             payload
         ),
     )
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
     resp = SearchUserPlaybooksViewResponse(
         success=response.success,
         user_playbooks=[to_user_playbook_view(rf) for rf in response.user_playbooks],
@@ -203,6 +299,28 @@ def search_user_playbooks_endpoint(
         request_id=getattr(payload, "request_id", None),
         session_id=getattr(payload, "session_id", None),
     )
+    background_tasks.add_task(
+        _log_search_request,
+        org_id=org_id,
+        log_entry={
+            "org_id": org_id,
+            "query_text": payload.query or "",
+            "search_mode": payload.search_mode.value
+            if hasattr(payload.search_mode, "value")
+            else str(payload.search_mode),
+            "total_results": len(resp.user_playbooks),
+            "user_playbook_results": len(resp.user_playbooks),
+            "threshold": payload.threshold,
+            "top_k": payload.top_k,
+            "latency_ms": elapsed_ms,
+            "caller_type": caller_type,
+            "request_id": getattr(payload, "request_id", None),
+            "session_id": getattr(payload, "session_id", None),
+            "user_id": payload.user_id,
+            "reformulation_enabled": 1 if payload.enable_reformulation else 0,
+            "endpoint": "search_user_playbooks",
+        },
+    )
     return resp
 
 
@@ -215,6 +333,7 @@ def search_user_playbooks_endpoint(
 def search_agent_playbooks_endpoint(
     request: Request,
     payload: SearchAgentPlaybookRequest,
+    background_tasks: BackgroundTasks,
     org_id: str = Depends(default_get_org_id),
     caller_type: str = Depends(default_get_caller_type),
     _gate: None = Depends(default_billing_gate("application")),  # noqa: B008
@@ -233,6 +352,7 @@ def search_agent_playbooks_endpoint(
     Returns:
         SearchAgentPlaybooksViewResponse: Response containing matching agent playbooks
     """
+    t0 = time.monotonic()
     response = _run_limited_api(
         org_id,
         "search",
@@ -240,6 +360,7 @@ def search_agent_playbooks_endpoint(
             payload
         ),
     )
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
     resp = SearchAgentPlaybooksViewResponse(
         success=response.success,
         agent_playbooks=[to_agent_playbook_view(fb) for fb in response.agent_playbooks],
@@ -257,6 +378,27 @@ def search_agent_playbooks_endpoint(
         surfaced_count=len(resp.agent_playbooks),
         request_id=getattr(payload, "request_id", None),
         session_id=getattr(payload, "session_id", None),
+    )
+    background_tasks.add_task(
+        _log_search_request,
+        org_id=org_id,
+        log_entry={
+            "org_id": org_id,
+            "query_text": payload.query or "",
+            "search_mode": payload.search_mode.value
+            if hasattr(payload.search_mode, "value")
+            else str(payload.search_mode),
+            "total_results": len(resp.agent_playbooks),
+            "agent_playbook_results": len(resp.agent_playbooks),
+            "threshold": payload.threshold,
+            "top_k": payload.top_k,
+            "latency_ms": elapsed_ms,
+            "caller_type": caller_type,
+            "request_id": getattr(payload, "request_id", None),
+            "session_id": getattr(payload, "session_id", None),
+            "reformulation_enabled": 1 if payload.enable_reformulation else 0,
+            "endpoint": "search_agent_playbooks",
+        },
     )
     return resp
 
@@ -313,7 +455,14 @@ def unified_search_endpoint(
                 reflexio = reflexio_cache.get_reflexio(org_id=org_id)
             return reflexio.unified_search(payload, org_id=org_id)
 
+        t0 = time.monotonic()
         response = _run_limited_api(org_id, "search", run_search)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        num_profiles = len(response.profiles)
+        num_agent_playbooks = len(response.agent_playbooks)
+        num_user_playbooks = len(response.user_playbooks)
+        total_results = num_profiles + num_agent_playbooks + num_user_playbooks
+
         with profile_step("search.response_view"):
             resp = UnifiedSearchViewResponse(
                 success=response.success,
@@ -340,10 +489,43 @@ def unified_search_endpoint(
             _meter_applied_learnings,
             org_id=org_id,
             caller_type=caller_type,
-            surfaced_count=len(resp.profiles)
-            + len(resp.agent_playbooks)
-            + len(resp.user_playbooks),
+            surfaced_count=total_results,
             request_id=getattr(payload, "request_id", None),
             session_id=getattr(payload, "session_id", None),
+        )
+        background_tasks.add_task(
+            _log_search_request,
+            org_id=org_id,
+            log_entry={
+                "org_id": org_id,
+                "query_text": payload.query,
+                "reformulated_query": response.reformulated_query,
+                "search_mode": payload.search_mode.value
+                if hasattr(payload.search_mode, "value")
+                else str(payload.search_mode),
+                "effective_search_mode": response.search_mode_effective,
+                "entity_types": _entity_types_json(
+                    [
+                        str(e) if not hasattr(e, "value") else e.value
+                        for e in (payload.entity_types or [])
+                    ]
+                    if payload.entity_types
+                    else None
+                ),
+                "total_results": total_results,
+                "profile_results": num_profiles,
+                "agent_playbook_results": num_agent_playbooks,
+                "user_playbook_results": num_user_playbooks,
+                "threshold": payload.threshold,
+                "top_k": payload.top_k,
+                "latency_ms": elapsed_ms,
+                "caller_type": caller_type,
+                "request_id": getattr(payload, "request_id", None),
+                "session_id": getattr(payload, "session_id", None),
+                "user_id": payload.user_id,
+                "reformulation_enabled": 1 if payload.enable_reformulation else 0,
+                "embedding_failed": 1 if response.degraded else 0,
+                "endpoint": "unified_search",
+            },
         )
     return resp
